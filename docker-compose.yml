@@ -11,6 +11,8 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - innrig-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin}"]
       interval: 10s
@@ -27,7 +29,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=${POSTGRES_DB:-innrigreifi};Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-password}
-      - Cors__Origins=${CORS_ORIGINS:-http://localhost:3000}
+      - Cors__Origins=${CORS_ORIGINS:-http://localhost:3000,http://localhost:80,http://localhost:443}
+    networks:
+      - innrig-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,7 +52,9 @@ services:
       - NODE_ENV=production
       - NUXT_HOST=0.0.0.0
       - NUXT_PORT=3000
-      - NUXT_PUBLIC_API_BASE=${FRONTEND_API_BASE:-http://localhost:8080}
+      - NUXT_PUBLIC_API_BASE=${FRONTEND_API_BASE:-http://localhost:80/api}
+    networks:
+      - innrig-network
     depends_on:
       - backend
     healthcheck:
@@ -58,6 +64,36 @@ services:
       retries: 3
       start_period: 40s
 
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: innrig-nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+      - "${NGINX_ADMIN_PORT:-81}:81"
+    volumes:
+      - nginx_proxy_manager_data:/data
+      - nginx_proxy_manager_ssl:/etc/letsencrypt
+    networks:
+      - innrig-network
+    depends_on:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:81 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   postgres_data:
     driver: local
+  nginx_proxy_manager_data:
+    driver: local
+  nginx_proxy_manager_ssl:
+    driver: local
+
+networks:
+  innrig-network:
+    driver: bridge

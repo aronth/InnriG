@@ -94,10 +94,13 @@ const handleLogin = async () => {
   isLoading.value = true
 
   try {
-    const user = await login(username.value, password.value)
+    const response = await login(username.value, password.value)
+    
+    // Log cookie status for debugging
+    console.log('Login successful. Cookie set:', response.cookieSet)
     
     // If user must change password, redirect to change password page
-    if (user.mustChangePassword) {
+    if (response.user.mustChangePassword) {
       navigateTo('/change-password')
     } else {
       navigateTo('/')

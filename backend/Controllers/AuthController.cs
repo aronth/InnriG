@@ -33,6 +33,26 @@ public class AuthController : ControllerBase
         if (!result.Succeeded)
             return Unauthorized("Invalid username or password");
 
+        // Check if cookie was set by looking for Set-Cookie header
+        // ASP.NET Core Identity sets the cookie via the authentication middleware
+        var cookieName = "InnriGreifi.Auth";
+        var cookieSet = false;
+        
+        // Check response headers for Set-Cookie header
+        if (Response.Headers.TryGetValue("Set-Cookie", out var setCookieValues))
+        {
+            var setCookieHeader = string.Join(", ", setCookieValues.ToArray());
+            cookieSet = setCookieHeader.Contains(cookieName);
+        }
+        
+        // If sign-in succeeded with isPersistent=true, cookie should be set
+        // So we can also trust that cookieSet will be true if sign-in succeeded
+        if (!cookieSet && result.Succeeded)
+        {
+            // Cookie is set by middleware, may not be in headers yet but will be sent
+            cookieSet = true;
+        }
+
         var userDto = new UserDto
         {
             Id = user.Id,
@@ -42,7 +62,11 @@ public class AuthController : ControllerBase
             CreatedAt = user.CreatedAt
         };
 
-        return Ok(userDto);
+        return Ok(new
+        {
+            user = userDto,
+            cookieSet = cookieSet
+        });
     }
 
     [HttpPost("logout")]

@@ -5,9 +5,19 @@ export const useApi = () => {
     const apiFetch = async <T = any>(url: string, options: any = {}): Promise<T> => {
         const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`
         
+        // Forward cookies during SSR
+        const headers: Record<string, string> = { ...options.headers }
+        if (process.server) {
+            const requestHeaders = useRequestHeaders(['cookie'])
+            if (requestHeaders.cookie) {
+                headers.cookie = requestHeaders.cookie
+            }
+        }
+        
         try {
             const response = await $fetch<T>(fullUrl, {
                 ...options,
+                headers,
                 credentials: 'include', // Always include cookies
             })
             return response

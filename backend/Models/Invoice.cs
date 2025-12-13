@@ -9,7 +9,10 @@ public class Invoice
     
     public Guid SupplierId { get; set; }
     
+    public Guid? BuyerId { get; set; }
+    
     public string SupplierName { get; set; } = string.Empty; // Keep temporarily for migration
+    public string BuyerName { get; set; } = string.Empty; // Keep temporarily for migration
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal TotalAmount { get; set; }
@@ -18,5 +21,7 @@ public class Invoice
     // Navigation properties
     [JsonIgnore]
     public Supplier Supplier { get; set; } = null!;
+    [JsonIgnore]
+    public Buyer? Buyer { get; set; }
     public List<InvoiceItem> Items { get; set; } = new();
 }

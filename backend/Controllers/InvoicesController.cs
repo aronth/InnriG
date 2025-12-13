@@ -53,12 +53,35 @@ public class InvoicesController : ControllerBase
         // 1. Get or create supplier
         var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoiceDto.SupplierName);
         
-        // 2. Create invoice entity
+        // 1.5. Get or create buyer (if provided)
+        Buyer? buyer = null;
+        if (!string.IsNullOrWhiteSpace(invoiceDto.BuyerName))
+        {
+            buyer = await _supplierProductService.GetOrCreateBuyerAsync(invoiceDto.BuyerName);
+        }
+        
+        // 2. Check for duplicate invoice (same supplier + invoice number)
+        var existingInvoice = await _context.Invoices
+            .FirstOrDefaultAsync(i => i.SupplierId == supplier.Id && i.InvoiceNumber == invoiceDto.InvoiceNumber);
+        
+        if (existingInvoice != null)
+        {
+            return Conflict(new { 
+                message = $"Reikningur með númeri {invoiceDto.InvoiceNumber} frá {invoiceDto.SupplierName} er þegar til í kerfinu.",
+                invoiceId = existingInvoice.Id,
+                invoiceNumber = existingInvoice.InvoiceNumber,
+                invoiceDate = existingInvoice.InvoiceDate
+            });
+        }
+        
+        // 3. Create invoice entity
         var invoice = new Invoice
         {
             Id = invoiceDto.Id == Guid.Empty ? Guid.NewGuid() : invoiceDto.Id,
             SupplierId = supplier.Id,
+            BuyerId = buyer?.Id,
             SupplierName = invoiceDto.SupplierName,
+            BuyerName = invoiceDto.BuyerName,
             InvoiceNumber = invoiceDto.InvoiceNumber,
             InvoiceDate = invoiceDto.InvoiceDate.Kind == DateTimeKind.Unspecified 
                 ? DateTime.SpecifyKind(invoiceDto.InvoiceDate, DateTimeKind.Utc)
@@ -69,7 +92,7 @@ public class InvoicesController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         
-        // 3. Process items: get or create products and create InvoiceItem entities
+        // 4. Process items: get or create products and create InvoiceItem entities
         foreach (var itemDto in invoiceDto.Items)
         {
             // Get or create product with compound key (SupplierId + ProductCode)
@@ -106,6 +129,109 @@ public class InvoicesController : ControllerBase
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, invoice);
     }
     
+    [HttpGet]
+    public async Task<IActionResult> GetInvoices(
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] string? sortBy = "invoiceDate",
+        [FromQuery] string? sortOrder = "desc")
+    {
+        var query = _context.Invoices
+            .Include(i => i.Supplier)
+            .Include(i => i.Buyer)
+            .AsQueryable();
+
+        // Apply filters
+        if (supplierId.HasValue)
+        {
+            query = query.Where(i => i.SupplierId == supplierId.Value);
+        }
+
+        if (buyerId.HasValue)
+        {
+            query = query.Where(i => i.BuyerId == buyerId.Value);
+        }
+
+        if (startDate.HasValue)
+        {
+            var startDateUtc = startDate.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc)
+                : startDate.Value.Kind == DateTimeKind.Local
+                    ? startDate.Value.ToUniversalTime()
+                    : startDate.Value;
+            query = query.Where(i => i.InvoiceDate >= startDateUtc);
+        }
+
+        if (endDate.HasValue)
+        {
+            var endDateUtc = endDate.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc)
+                : endDate.Value.Kind == DateTimeKind.Local
+                    ? endDate.Value.ToUniversalTime()
+                    : endDate.Value;
+            // Include the entire end date
+            endDateUtc = endDateUtc.Date.AddDays(1).AddTicks(-1);
+            query = query.Where(i => i.InvoiceDate <= endDateUtc);
+        }
+
+        // Apply sorting
+        var sortByLower = (sortBy ?? "invoiceDate").ToLower();
+        var sortOrderLower = (sortOrder ?? "desc").ToLower();
+        
+        query = sortByLower switch
+        {
+            "invoicedate" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.InvoiceDate)
+                : query.OrderByDescending(i => i.InvoiceDate),
+            "invoicenumber" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.InvoiceNumber)
+                : query.OrderByDescending(i => i.InvoiceNumber),
+            "totalamount" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.TotalAmount)
+                : query.OrderByDescending(i => i.TotalAmount),
+            "suppliername" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.SupplierName)
+                : query.OrderByDescending(i => i.SupplierName),
+            "buyername" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.BuyerName)
+                : query.OrderByDescending(i => i.BuyerName),
+            "createdat" => sortOrderLower == "asc"
+                ? query.OrderBy(i => i.CreatedAt)
+                : query.OrderByDescending(i => i.CreatedAt),
+            _ => query.OrderByDescending(i => i.InvoiceDate) // Default: newest first
+        };
+
+        var invoices = await query
+            .Select(i => new
+            {
+                i.Id,
+                i.SupplierId,
+                i.BuyerId,
+                i.SupplierName,
+                i.BuyerName,
+                i.InvoiceNumber,
+                i.InvoiceDate,
+                i.TotalAmount,
+                i.CreatedAt,
+                ItemCount = i.Items.Count,
+                Supplier = new
+                {
+                    i.Supplier.Id,
+                    i.Supplier.Name
+                },
+                Buyer = i.Buyer != null ? new
+                {
+                    i.Buyer.Id,
+                    i.Buyer.Name
+                } : null
+            })
+            .ToListAsync();
+
+        return Ok(invoices);
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetInvoice(Guid id)
     {

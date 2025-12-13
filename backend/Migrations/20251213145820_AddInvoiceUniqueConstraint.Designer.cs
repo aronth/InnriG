@@ -3,6 +3,7 @@ using System;
 using InnriGreifi.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace InnriGreifi.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251213145820_AddInvoiceUniqueConstraint")]
+    partial class AddInvoiceUniqueConstraint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,58 +25,11 @@ namespace InnriGreifi.API.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("InnriGreifi.API.Models.Buyer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .HasColumnType("text");
-
-                    b.Property<string>("City")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Country")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("PostalCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("TaxId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("Buyers");
-                });
-
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BuyerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("BuyerName")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -97,8 +53,6 @@ namespace InnriGreifi.API.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BuyerId");
 
                     b.HasIndex("SupplierId", "InvoiceNumber")
                         .IsUnique();
@@ -451,18 +405,11 @@ namespace InnriGreifi.API.Migrations
 
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>
                 {
-                    b.HasOne("InnriGreifi.API.Models.Buyer", "Buyer")
-                        .WithMany("Invoices")
-                        .HasForeignKey("BuyerId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("InnriGreifi.API.Models.Supplier", "Supplier")
                         .WithMany("Invoices")
                         .HasForeignKey("SupplierId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Buyer");
 
                     b.Navigation("Supplier");
                 });
@@ -546,11 +493,6 @@ namespace InnriGreifi.API.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("InnriGreifi.API.Models.Buyer", b =>
-                {
-                    b.Navigation("Invoices");
                 });
 
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>

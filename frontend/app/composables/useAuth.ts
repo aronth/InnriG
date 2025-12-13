@@ -8,16 +8,16 @@ export const useAuth = () => {
     const currentUser = useState<User | null>('auth.user', () => null)
     const isAuthenticated = computed(() => currentUser.value !== null)
 
-    const login = async (username: string, password: string): Promise<User> => {
-        const user = await apiFetch<User>(`${apiBase}/api/auth/login`, {
+    const login = async (username: string, password: string): Promise<{ user: User; cookieSet: boolean }> => {
+        const response = await apiFetch<{ user: User; cookieSet: boolean }>(`${apiBase}/api/auth/login`, {
             method: 'POST',
             body: {
                 username,
                 password
             }
         })
-        currentUser.value = user
-        return user
+        currentUser.value = response.user
+        return response
     }
 
     const logout = async (): Promise<void> => {

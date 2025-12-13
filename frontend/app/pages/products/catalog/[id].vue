@@ -18,7 +18,10 @@
       <h3 class="text-xl font-bold text-red-900 mb-2">Villa kom upp</h3>
       <p class="text-red-700">{{ error }}</p>
       <NuxtLink 
-        to="/products/catalog"
+        :to="{
+          path: '/products/catalog',
+          query: route.query.supplierId ? { supplierId: route.query.supplierId } : {}
+        }"
         class="inline-block mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
       >
         Til baka í vörulista
@@ -29,7 +32,10 @@
     <div v-else-if="productData">
       <!-- Back Button -->
       <NuxtLink 
-        to="/products/catalog"
+        :to="{
+          path: '/products/catalog',
+          query: route.query.supplierId ? { supplierId: route.query.supplierId } : {}
+        }"
         class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 mb-6 font-medium transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

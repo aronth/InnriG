@@ -89,6 +89,88 @@ public class HtmlInvoiceParser : IInvoiceParser
         }
         if (string.IsNullOrEmpty(invoice.SupplierName)) invoice.SupplierName = "Unknown Supplier";
 
+        // 1.5. Extract Buyer (Kaupandi)
+        // Try new format first: buyer_info class
+        var buyerInfoNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'buyer_info')]");
+        if (buyerInfoNode != null)
+        {
+            var buyerBoldNode = buyerInfoNode.SelectSingleNode(".//b");
+            if (buyerBoldNode != null)
+            {
+                invoice.BuyerName = CleanBuyerName(buyerBoldNode.InnerText.Trim());
+            }
+            else
+            {
+                // Fallback: get first line
+                var firstLine = buyerInfoNode.InnerText.Split(new[] { "\r\n", "\r", "\n", "<br>" }, StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault(l => !string.IsNullOrWhiteSpace(l.Trim()));
+                if (firstLine != null)
+                {
+                    invoice.BuyerName = CleanBuyerName(firstLine.Trim());
+                }
+            }
+        }
+        else
+        {
+            // Try old format: "Kaupandi:" label followed by content
+            var kaupandiLabel = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Kaupandi:') or contains(., 'Kaupandi')]]");
+            if (kaupandiLabel != null)
+            {
+                foreach (var labelNode in kaupandiLabel)
+                {
+                    // Look for <b> tag in parent or following siblings
+                    var parent = labelNode.ParentNode;
+                    if (parent != null)
+                    {
+                        var boldNode = parent.SelectSingleNode(".//b");
+                        if (boldNode != null)
+                        {
+                            invoice.BuyerName = CleanBuyerName(boldNode.InnerText.Trim());
+                            break;
+                        }
+                        
+                        // Or look in following ListItem divs
+                        var listItems = parent.SelectNodes(".//div[contains(@class, 'ListItem')]");
+                        if (listItems != null && listItems.Count > 0)
+                        {
+                            var firstBold = listItems[0].SelectSingleNode(".//b");
+                            if (firstBold != null)
+                            {
+                                invoice.BuyerName = CleanBuyerName(firstBold.InnerText.Trim());
+                                break;
+                            }
+                            else if (!string.IsNullOrWhiteSpace(listItems[0].InnerText))
+                            {
+                                invoice.BuyerName = CleanBuyerName(listItems[0].InnerText.Trim());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Text scan fallback
+            if (string.IsNullOrEmpty(invoice.BuyerName))
+            {
+                int kaupandiIdx = lines.FindIndex(l => l.Contains("Kaupandi"));
+                if (kaupandiIdx != -1)
+                {
+                    for (int i = kaupandiIdx + 1; i < Math.Min(kaupandiIdx + 10, lines.Count); i++)
+                    {
+                        var line = lines[i];
+                        if (line.Contains("ehf", StringComparison.OrdinalIgnoreCase) || 
+                            line.Contains("hf", StringComparison.OrdinalIgnoreCase) || 
+                            line.Contains("slf", StringComparison.OrdinalIgnoreCase) ||
+                            !string.IsNullOrWhiteSpace(line))
+                        {
+                            invoice.BuyerName = CleanBuyerName(line);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // 2. Extract Date
         // Specific scan for "Útgáfudagur reiknings" in P tags or Divs directly
         var dateNodes = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Útgáfudagur reiknings') or contains(., 'Utgafudagur reiknings')]]");
@@ -195,6 +277,32 @@ public class HtmlInvoiceParser : IInvoiceParser
         {
             cleaned = Regex.Replace(cleaned, pattern + ".*$", "", RegexOptions.IgnoreCase);
         }
+
+        // Trim and return
+        return cleaned.Trim().TrimEnd(',', '.');
+    }
+
+    private string CleanBuyerName(string rawName)
+    {
+        if (string.IsNullOrWhiteSpace(rawName)) return rawName;
+
+        // Similar to CleanSupplierName but for buyer names
+        // Remove address patterns
+        var addressPatterns = new[]
+        {
+            @",\s*[A-ZÞÆÖÁÍÉÝÚÓa-zþæöáíéýúó\s]+\s+\d+",  // ", Street 123"
+            @",\s*\d{3}\s+[A-ZÞÆÖÁÍÉÝÚÓa-zþæöáíéýúó]",   // ", 101 Reykjavik"
+            @",\s*IS\s*$",                                 // ", IS" at end
+        };
+
+        var cleaned = rawName;
+        foreach (var pattern in addressPatterns)
+        {
+            cleaned = Regex.Replace(cleaned, pattern + ".*$", "", RegexOptions.IgnoreCase);
+        }
+
+        // Remove tax ID patterns (Icelandic kennitala: 10 digits)
+        cleaned = Regex.Replace(cleaned, @"\b\d{6}[-]?\d{4}\b", "");
 
         // Trim and return
         return cleaned.Trim().TrimEnd(',', '.');

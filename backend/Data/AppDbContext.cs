@@ -11,6 +11,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
 
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<Buyer> Buyers { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<InvoiceItem> InvoiceItems { get; set; }
 
@@ -21,6 +22,11 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         // Supplier Configuration
         modelBuilder.Entity<Supplier>()
             .HasIndex(s => s.Name)
+            .IsUnique();
+        
+        // Buyer Configuration
+        modelBuilder.Entity<Buyer>()
+            .HasIndex(b => b.Name)
             .IsUnique();
         
         // Product Configuration
@@ -40,6 +46,16 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .WithMany(s => s.Invoices)
             .HasForeignKey(i => i.SupplierId)
             .OnDelete(DeleteBehavior.Restrict);
+        
+        modelBuilder.Entity<Invoice>()
+            .HasOne(i => i.Buyer)
+            .WithMany(b => b.Invoices)
+            .HasForeignKey(i => i.BuyerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(i => new { i.SupplierId, i.InvoiceNumber })
+            .IsUnique();
         
         modelBuilder.Entity<Invoice>()
             .Property(i => i.TotalAmount)

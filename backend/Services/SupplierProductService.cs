@@ -8,6 +8,7 @@ public interface ISupplierProductService
 {
     Task<Supplier> GetOrCreateSupplierAsync(string supplierName);
     Task<Product> GetOrCreateProductAsync(Guid supplierId, string productCode, string productName, string? unit);
+    Task<Buyer> GetOrCreateBuyerAsync(string buyerName, string? address = null, string? city = null, string? postalCode = null, string? country = null, string? taxId = null);
 }
 
 public class SupplierProductService : ISupplierProductService
@@ -91,5 +92,75 @@ public class SupplierProductService : ISupplierProductService
         }
 
         return product;
+    }
+
+    public async Task<Buyer> GetOrCreateBuyerAsync(string buyerName, string? address = null, string? city = null, string? postalCode = null, string? country = null, string? taxId = null)
+    {
+        // Try to find existing buyer by name
+        var buyer = await _context.Buyers
+            .FirstOrDefaultAsync(b => b.Name == buyerName);
+
+        if (buyer == null)
+        {
+            // Create new buyer
+            buyer = new Buyer
+            {
+                Id = Guid.NewGuid(),
+                Name = buyerName,
+                Address = address,
+                City = city,
+                PostalCode = postalCode,
+                Country = country,
+                TaxId = taxId,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Buyers.Add(buyer);
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            // Update buyer info if provided and different
+            var updated = false;
+            
+            if (!string.IsNullOrEmpty(address) && buyer.Address != address)
+            {
+                buyer.Address = address;
+                updated = true;
+            }
+            
+            if (!string.IsNullOrEmpty(city) && buyer.City != city)
+            {
+                buyer.City = city;
+                updated = true;
+            }
+            
+            if (!string.IsNullOrEmpty(postalCode) && buyer.PostalCode != postalCode)
+            {
+                buyer.PostalCode = postalCode;
+                updated = true;
+            }
+            
+            if (!string.IsNullOrEmpty(country) && buyer.Country != country)
+            {
+                buyer.Country = country;
+                updated = true;
+            }
+            
+            if (!string.IsNullOrEmpty(taxId) && buyer.TaxId != taxId)
+            {
+                buyer.TaxId = taxId;
+                updated = true;
+            }
+
+            if (updated)
+            {
+                buyer.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        return buyer;
     }
 }

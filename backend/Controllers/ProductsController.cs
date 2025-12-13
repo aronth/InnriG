@@ -19,17 +19,24 @@ public class ProductsController : ControllerBase
 
     // Get all products with supplier info and latest prices
     [HttpGet]
-    public async Task<IActionResult> GetProducts([FromQuery] Guid? supplierId = null)
+    public async Task<IActionResult> GetProducts(
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] string? search = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null,
+        [FromQuery] bool? hasPrice = null,
+        [FromQuery] string? sortBy = "supplierName",
+        [FromQuery] string? sortOrder = "asc",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
-        var query = _context.Products.AsQueryable();
+        // Validate pagination parameters
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100; // Limit max page size
 
-        if (supplierId.HasValue)
-        {
-            query = query.Where(p => p.SupplierId == supplierId.Value);
-        }
-
-        // Get products with their latest invoice item in a single query
-        var result = await query
+        // Build base query with latest invoice items
+        var baseQuery = _context.Products
             .GroupJoin(
                 _context.InvoiceItems.Include(ii => ii.Invoice),
                 p => p.Id,
@@ -55,12 +62,126 @@ public class ProductsController : ControllerBase
                     ? (p.LatestItem.Discount / p.LatestItem.ListPrice) * 100
                     : null,
                 LastPurchaseDate = p.LatestItem != null ? p.LatestItem.Invoice.InvoiceDate : null
-            })
-            .OrderBy(p => p.SupplierName)
-            .ThenBy(p => p.Name)
+            });
+
+        // Apply filters
+        if (supplierId.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.SupplierId == supplierId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            baseQuery = baseQuery.Where(p => 
+                p.Name.ToLower().Contains(searchLower) ||
+                p.ProductCode.ToLower().Contains(searchLower) ||
+                (p.Description != null && p.Description.ToLower().Contains(searchLower)));
+        }
+
+        if (minPrice.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue && p.LatestPrice >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue && p.LatestPrice <= maxPrice.Value);
+        }
+
+        if (hasPrice.HasValue)
+        {
+            if (hasPrice.Value)
+            {
+                baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue);
+            }
+            else
+            {
+                baseQuery = baseQuery.Where(p => !p.LatestPrice.HasValue);
+            }
+        }
+
+        // Apply sorting
+        baseQuery = sortBy.ToLower() switch
+        {
+            "name" => sortOrder.ToLower() == "desc" 
+                ? baseQuery.OrderByDescending(p => p.Name)
+                : baseQuery.OrderBy(p => p.Name),
+            "productcode" => sortOrder.ToLower() == "desc"
+                ? baseQuery.OrderByDescending(p => p.ProductCode)
+                : baseQuery.OrderBy(p => p.ProductCode),
+            "suppliername" => sortOrder.ToLower() == "desc"
+                ? baseQuery.OrderByDescending(p => p.SupplierName).ThenByDescending(p => p.Name)
+                : baseQuery.OrderBy(p => p.SupplierName).ThenBy(p => p.Name),
+            "latestprice" => sortOrder.ToLower() == "desc"
+                ? baseQuery.OrderByDescending(p => p.LatestPrice ?? decimal.MinValue)
+                : baseQuery.OrderBy(p => p.LatestPrice ?? decimal.MaxValue),
+            "lastpurchasedate" => sortOrder.ToLower() == "desc"
+                ? baseQuery.OrderByDescending(p => p.LastPurchaseDate ?? DateTime.MinValue)
+                : baseQuery.OrderBy(p => p.LastPurchaseDate ?? DateTime.MaxValue),
+            _ => baseQuery.OrderBy(p => p.SupplierName).ThenBy(p => p.Name) // Default sorting
+        };
+
+        // Get total count before pagination
+        var totalCount = await baseQuery.CountAsync();
+
+        // Apply pagination
+        var items = await baseQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
-        
-        return Ok(result);
+
+        var response = new PaginatedResponse<ProductListDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return Ok(response);
+    }
+
+    // Lookup products for autocomplete (requires 3+ characters)
+    [HttpGet("lookup")]
+    public async Task<IActionResult> LookupProducts([FromQuery] string q, [FromQuery] int limit = 10)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 3)
+        {
+            return BadRequest("Query must be at least 3 characters long");
+        }
+
+        if (limit < 1) limit = 1;
+        if (limit > 50) limit = 50; // Limit max results
+
+        var queryLower = q.ToLower();
+
+        var results = await _context.Products
+            .Where(p => 
+                p.Name.ToLower().Contains(queryLower) ||
+                p.ProductCode.ToLower().Contains(queryLower))
+            .GroupJoin(
+                _context.InvoiceItems.Include(ii => ii.Invoice),
+                p => p.Id,
+                ii => ii.ProductId,
+                (product, items) => new
+                {
+                    Product = product,
+                    LatestItem = items.OrderByDescending(ii => ii.Invoice.InvoiceDate).FirstOrDefault()
+                })
+            .Select(p => new ProductLookupDto
+            {
+                Id = p.Product.Id,
+                ProductCode = p.Product.ProductCode,
+                Name = p.Product.Name,
+                SupplierName = p.Product.Supplier.Name,
+                LatestPrice = p.LatestItem != null ? p.LatestItem.UnitPrice : null
+            })
+            .OrderBy(p => p.Name)
+            .Take(limit)
+            .ToListAsync();
+
+        return Ok(results);
     }
 
     // Get product by ID with price history
@@ -158,6 +279,68 @@ public class ProductsController : ControllerBase
         }
 
         return Ok(priceComparison.OrderBy(p => ((dynamic)p).LatestPrice));
+    }
+
+    // Compare multiple products by IDs with full price history
+    [HttpPost("compare")]
+    public async Task<IActionResult> CompareMultipleProducts([FromBody] List<Guid> productIds)
+    {
+        if (productIds == null || !productIds.Any())
+            return BadRequest("At least one product ID is required");
+
+        if (productIds.Count > 10)
+            return BadRequest("Maximum 10 products can be compared at once");
+
+        var comparisonResults = new List<object>();
+
+        foreach (var productId in productIds)
+        {
+            var product = await _context.Products
+                .Include(p => p.Supplier)
+                .FirstOrDefaultAsync(p => p.Id == productId);
+
+            if (product == null)
+                continue;
+
+            var latestItem = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == productId)
+                .Include(ii => ii.Invoice)
+                .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+                .FirstOrDefaultAsync();
+
+            var history = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == productId)
+                .Include(ii => ii.Invoice)
+                .OrderBy(ii => ii.Invoice.InvoiceDate)
+                .Select(ii => new
+                {
+                    InvoiceDate = ii.Invoice.InvoiceDate,
+                    UnitPrice = ii.UnitPrice,
+                    ListPrice = ii.ListPrice,
+                    Discount = ii.Discount,
+                    Quantity = ii.Quantity,
+                    Unit = ii.Unit
+                })
+                .ToListAsync();
+
+            comparisonResults.Add(new
+            {
+                ProductId = product.Id,
+                ProductCode = product.ProductCode,
+                ProductName = product.Name,
+                Description = product.Description,
+                SupplierId = product.SupplierId,
+                SupplierName = product.Supplier.Name,
+                LatestPrice = latestItem?.UnitPrice,
+                ListPrice = latestItem?.ListPrice,
+                Discount = latestItem?.Discount,
+                LastPurchaseDate = latestItem?.Invoice.InvoiceDate,
+                Unit = latestItem?.Unit ?? product.CurrentUnit,
+                History = history
+            });
+        }
+
+        return Ok(comparisonResults);
     }
 
     [HttpPost]

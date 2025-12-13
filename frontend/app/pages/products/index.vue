@@ -160,6 +160,9 @@ const onFileSelected = async (file: File) => {
 
 const onConfirmInvoice = async () => {
   if (!invoiceToReview.value) return;
+  isLoading.value = true;
+  errorMsg.value = '';
+  
   try {
     await $fetch(`${apiBase}/api/invoices/confirm`, {
       method: 'POST',
@@ -167,9 +170,30 @@ const onConfirmInvoice = async () => {
     });
     showReview.value = false;
     invoiceToReview.value = null;
+    isLoading.value = false;
     alert('Reikningur vistaður!');
-  } catch (err) {
-    alert('Mistókst að vista reikning.');
+  } catch (err: any) {
+    isLoading.value = false;
+    
+    // Handle duplicate invoice (409 Conflict)
+    if (err.status === 409 || err.statusCode === 409) {
+      const errorData = err.data || err;
+      const message = errorData.message || `Reikningur með númeri ${invoiceToReview.value?.invoiceNumber} frá ${invoiceToReview.value?.supplierName} er þegar til í kerfinu.`;
+      errorMsg.value = message;
+      
+      // Show alert with link to existing invoice if available
+      if (errorData.invoiceId) {
+        const existingInvoiceUrl = `${window.location.origin}/invoices/${errorData.invoiceId}`;
+        if (confirm(`${message}\n\nViltu skoða fyrirliggjandi reikning?`)) {
+          window.open(existingInvoiceUrl, '_blank');
+        }
+      } else {
+        alert(message);
+      }
+    } else {
+      errorMsg.value = err.data?.message || err.message || 'Mistókst að vista reikning.';
+      alert(errorMsg.value);
+    }
     console.error(err);
   }
 };

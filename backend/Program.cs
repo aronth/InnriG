@@ -42,9 +42,12 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.Cookie.HttpOnly = true;
+    options.Cookie.Path = "/"; // Ensure cookie is available for all paths
     options.ExpireTimeSpan = TimeSpan.FromDays(30);
     options.SlidingExpiration = true;
     options.LoginPath = "/api/auth/login";
+    // Ensure cookie persists across browser sessions
+    options.Cookie.IsEssential = true;
 });
 
 builder.Services.AddAuthorization();

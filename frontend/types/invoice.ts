@@ -16,6 +16,7 @@ export interface InvoiceItem {
 export interface Invoice {
     id: string;
     supplierName: string;
+    buyerName?: string;
     invoiceNumber: string;
     invoiceDate: string;
     totalAmount: number;

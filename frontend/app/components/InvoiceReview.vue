@@ -1,13 +1,50 @@
 <template>
   <div class="bg-white shadow rounded-lg p-6">
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-xl font-bold text-gray-800">Yfirferð Reiknings</h2>
-      <div v-if="localInvoice">
-        <span class="text-gray-500 text-sm">Birgir: </span>
-        <span class="font-semibold">{{ localInvoice.supplierName }}</span>
-        <span class="mx-2">|</span>
-        <span class="text-gray-500 text-sm">Dagsetning: </span>
-        <span class="font-semibold">{{ formatDate(localInvoice.invoiceDate) }}</span>
+    <div class="mb-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Yfirferð Reiknings</h2>
+      
+      <!-- Invoice Header Information (Editable) -->
+      <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Birgir</label>
+            <input 
+              v-model="localInvoice.supplierName" 
+              class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border bg-white"
+              placeholder="Nafn birgja"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">
+              Kaupandi
+              <span class="text-gray-400 font-normal">(valfrjálst)</span>
+            </label>
+            <input 
+              v-model="localInvoice.buyerName" 
+              class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border bg-white"
+              placeholder="Nafn kaupanda"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Reikningsnúmer</label>
+            <input 
+              v-model="localInvoice.invoiceNumber" 
+              class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border bg-white font-mono"
+              placeholder="Reikningsnúmer"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Dagsetning</label>
+            <input 
+              type="date"
+              :value="formatDateForInput(localInvoice.invoiceDate)"
+              @input="updateInvoiceDate($event)"
+              class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border bg-white"
+            />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -93,6 +130,10 @@ watch(() => props.invoice, (newVal) => {
     if (newVal) {
         // Deep clone to avoid mutating prop directly
         localInvoice.value = JSON.parse(JSON.stringify(newVal));
+        // Ensure buyerName exists (even if empty)
+        if (localInvoice.value && !localInvoice.value.buyerName) {
+            localInvoice.value.buyerName = '';
+        }
     }
 }, { immediate: true });
 
@@ -118,6 +159,22 @@ const save = () => {
 const formatDate = (dateString: string) => {
   if (!dateString) return '';
   return new Date(dateString).toLocaleDateString('is-IS');
+};
+
+const formatDateForInput = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const updateInvoiceDate = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.value && localInvoice.value) {
+    localInvoice.value.invoiceDate = new Date(target.value).toISOString();
+  }
 };
 
 const formatCurrency = (val: number) => {
