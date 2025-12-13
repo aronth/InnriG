@@ -1,7 +1,10 @@
 FROM node:18 AS build
 WORKDIR /app
+# Install build dependencies for native modules
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
-RUN npm ci
+# Use npm install to ensure optional dependencies (native bindings) are installed
+RUN npm install
 COPY . .
 RUN npm run build
 
