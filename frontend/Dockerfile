@@ -1,10 +1,9 @@
 FROM node:18 AS build
 WORKDIR /app
-# Install build dependencies for native modules
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
-# Use npm install to ensure optional dependencies (native bindings) are installed
-RUN npm install
+# npm ci ensures reproducible builds by installing exact versions from package-lock.json
+# It also installs optional dependencies by default, including native bindings
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -17,5 +16,6 @@ ENV NUXT_PORT=3000
 EXPOSE 3000
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/package*.json ./
+# Use npm ci for consistency with build stage - ensures exact same dependency versions
 RUN npm ci --omit=dev
 CMD ["node", ".output/server/index.mjs"]
