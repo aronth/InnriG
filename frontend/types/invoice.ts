@@ -9,6 +9,7 @@ export interface InvoiceItem {
     listPrice: number; // Original Price
     vatCode: string;   // AA, S11 etc
     discount: number;
+    discountPercentage?: number;
     totalPrice: number;
     totalPriceWithVat: number;
 }
@@ -23,4 +24,7 @@ export interface Invoice {
     totalAmount: number;
     items: InvoiceItem[];
     createdAt: string;
+    isDuplicate?: boolean;
+    existingInvoiceId?: string;
+    existingInvoiceDate?: string;
 }

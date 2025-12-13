@@ -159,7 +159,8 @@
                   <span class="text-sm text-gray-600">{{ formatPrice(item.listPrice) }} kr</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right">
-                  <span class="text-sm font-medium text-red-600">-{{ formatPrice(item.discount) }} kr</span>
+                  <span v-if="item.discount != null && item.discount > 0" class="text-sm font-medium text-red-600">-{{ formatPercent(item.discount) }}%</span>
+                  <span v-else class="text-sm text-gray-400">-</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right">
                   <span class="text-sm font-bold text-indigo-600">{{ formatPrice(item.unitPrice) }} kr</span>
@@ -325,6 +326,13 @@ const formatDate = (date: string) => {
     month: 'long',
     day: 'numeric'
   })
+}
+
+const formatPercent = (percent: number) => {
+  return new Intl.NumberFormat('is-IS', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(percent)
 }
 
 onMounted(() => {

@@ -57,7 +57,67 @@ public class HtmlInvoiceParser : IInvoiceParser
             }
         }
         
-        // Strategy 2: Look for "Nr." or "Nr:" followed by number
+        // Strategy 2: Look for container with "REIKNINGUR" and then find "Nr." in same container or siblings
+        if (string.IsNullOrEmpty(invoice.InvoiceNumber) || invoice.InvoiceNumber == Path.GetFileNameWithoutExtension(fileName))
+        {
+            var reikningurContainer = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'righthausreikningur') or contains(@id, 'hausreikningur')]");
+            if (reikningurContainer != null)
+            {
+                // Get the full text of the container (handles &nbsp; and line breaks)
+                var containerText = System.Net.WebUtility.HtmlDecode(reikningurContainer.InnerText);
+                // Look for "Nr." pattern in the container - handle whitespace, &nbsp;, and line breaks
+                var nrMatch = Regex.Match(containerText, @"Nr\.?\s*:?\s*([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
+                if (nrMatch.Success)
+                {
+                    invoice.InvoiceNumber = nrMatch.Groups[1].Value.Trim();
+                }
+                else
+                {
+                    // If "REIKNINGUR" is in container, look for number in sibling divs
+                    var reikningurDiv = reikningurContainer.SelectSingleNode(".//*[contains(text(), 'REIKNINGUR') or contains(text(), 'Reikningur')]");
+                    if (reikningurDiv != null)
+                    {
+                        var parent = reikningurDiv.ParentNode;
+                        if (parent != null)
+                        {
+                            // Look for divs with numbers after REIKNINGUR div
+                            var siblingDivs = parent.SelectNodes(".//div");
+                            if (siblingDivs != null)
+                            {
+                                bool foundReikningur = false;
+                                foreach (var div in siblingDivs)
+                                {
+                                    if (foundReikningur)
+                                    {
+                                        var divText = System.Net.WebUtility.HtmlDecode(div.InnerText).Trim();
+                                        // Check if this div contains "Nr." and a number
+                                        var nrInDiv = Regex.Match(divText, @"Nr\.?\s*:?\s*([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
+                                        if (nrInDiv.Success)
+                                        {
+                                            invoice.InvoiceNumber = nrInDiv.Groups[1].Value.Trim();
+                                            break;
+                                        }
+                                        // Or just extract a number if it looks like an invoice number (4+ digits or alphanumeric)
+                                        var numberOnly = Regex.Match(divText, @"^([A-Za-z0-9\-]+)$");
+                                        if (numberOnly.Success && (divText.Length >= 4 || Regex.IsMatch(divText, @"^\d{4,}")))
+                                        {
+                                            invoice.InvoiceNumber = numberOnly.Groups[1].Value.Trim();
+                                            break;
+                                        }
+                                    }
+                                    if (div.InnerText.Contains("REIKNINGUR", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        foundReikningur = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Strategy 3: Look for "Nr." or "Nr:" followed by number (general search)
         if (string.IsNullOrEmpty(invoice.InvoiceNumber) || invoice.InvoiceNumber == Path.GetFileNameWithoutExtension(fileName))
         {
             var nrNodes = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Nr.') or contains(., 'Nr:') or contains(., 'Nr ')]]");
@@ -65,19 +125,27 @@ public class HtmlInvoiceParser : IInvoiceParser
             {
                 foreach (var node in nrNodes)
                 {
-                    var text = node.InnerText;
+                    // Get parent or container text to catch cases where "Nr." and number are in different nodes
+                    var container = node.ParentNode ?? node;
+                    // Decode HTML entities like &nbsp;
+                    var text = System.Net.WebUtility.HtmlDecode(container.InnerText);
                     // Pattern: "Nr." or "Nr:" followed by whitespace and then the number
                     var nrMatch = Regex.Match(text, @"Nr\.?\s*:?\s*([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
                     if (nrMatch.Success)
                     {
-                        invoice.InvoiceNumber = nrMatch.Groups[1].Value.Trim();
-                        break;
+                        var extractedNumber = nrMatch.Groups[1].Value.Trim();
+                        // Make sure it's not just a small number (like line numbers) - invoice numbers are usually 4+ digits
+                        if (extractedNumber.Length >= 4 || Regex.IsMatch(extractedNumber, @"^\d{4,}"))
+                        {
+                            invoice.InvoiceNumber = extractedNumber;
+                            break;
+                        }
                     }
                 }
             }
         }
         
-        // Strategy 3: Look for document_details class with invoice number
+        // Strategy 4: Look for document_details class with invoice number
         if (string.IsNullOrEmpty(invoice.InvoiceNumber) || invoice.InvoiceNumber == Path.GetFileNameWithoutExtension(fileName))
         {
             var docDetailsNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'document_details')]");

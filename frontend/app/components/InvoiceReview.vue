@@ -3,6 +3,39 @@
     <div class="mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">Yfirferð Reiknings</h2>
       
+      <!-- Duplicate Warning Banner -->
+      <div v-if="localInvoice?.isDuplicate" class="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+        <div class="flex items-start">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div class="ml-3 flex-1">
+            <h3 class="text-sm font-semibold text-red-800">Reikningur er þegar til í kerfinu</h3>
+            <div class="mt-2 text-sm text-red-700">
+              <p>
+                Reikningur með númeri <strong>{{ localInvoice.invoiceNumber }}</strong> frá 
+                <strong>{{ localInvoice.supplierName }}</strong> er þegar til í kerfinu.
+              </p>
+              <p v-if="localInvoice.existingInvoiceDate" class="mt-1">
+                Fyrirliggjandi reikningur er frá {{ formatDate(localInvoice.existingInvoiceDate) }}.
+              </p>
+              <NuxtLink
+                v-if="localInvoice.existingInvoiceId"
+                :to="`/invoices/${localInvoice.existingInvoiceId}`"
+                class="mt-2 inline-flex items-center text-sm font-medium text-red-800 hover:text-red-900 underline"
+              >
+                Skoða fyrirliggjandi reikning
+                <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </NuxtLink>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- Invoice Header Information (Editable) -->
       <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -121,7 +154,18 @@
 
     <div class="mt-6 flex justify-end gap-3">
        <button @click="$emit('cancel')" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Hætta við</button>
-       <button @click="save" class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">Staðfesta & Vista</button>
+       <button 
+         @click="save" 
+         :disabled="localInvoice?.isDuplicate"
+         :class="[
+           'px-4 py-2 border rounded-md text-sm font-medium',
+           localInvoice?.isDuplicate
+             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+             : 'bg-blue-600 border-transparent text-white hover:bg-blue-700'
+         ]"
+       >
+         Staðfesta & Vista
+       </button>
     </div>
   </div>
 </template>

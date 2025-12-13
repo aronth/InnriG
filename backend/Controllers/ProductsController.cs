@@ -58,9 +58,7 @@ public class ProductsController : ControllerBase
                 LatestPrice = p.LatestItem != null ? p.LatestItem.UnitPrice : null,
                 ListPrice = p.LatestItem != null ? p.LatestItem.ListPrice : null,
                 Discount = p.LatestItem != null ? p.LatestItem.Discount : null,
-                DiscountPercentage = p.LatestItem != null && p.LatestItem.ListPrice > 0
-                    ? (p.LatestItem.Discount / p.LatestItem.ListPrice) * 100
-                    : null,
+                DiscountPercentage = p.LatestItem != null ? p.LatestItem.Discount : null,
                 LastPurchaseDate = p.LatestItem != null ? p.LatestItem.Invoice.InvoiceDate : null
             });
 

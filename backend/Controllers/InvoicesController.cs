@@ -35,8 +35,33 @@ public class InvoicesController : ControllerBase
         try
         {
             var invoice = _parser.ParseInvoice(htmlContent, file.FileName);
-            // Return for review, do not save yet
-            return Ok(invoice);
+            
+            // Check if invoice already exists (by supplier + invoice number)
+            // First, get or create supplier to check against existing invoices
+            var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoice.SupplierName);
+            
+            var existingInvoice = await _context.Invoices
+                .Include(i => i.Supplier)
+                .FirstOrDefaultAsync(i => i.SupplierId == supplier.Id && i.InvoiceNumber == invoice.InvoiceNumber);
+            
+            // Return invoice with duplicate flag
+            var response = new
+            {
+                id = invoice.Id,
+                supplierName = invoice.SupplierName,
+                buyerName = invoice.BuyerName,
+                buyerTaxId = invoice.BuyerTaxId,
+                invoiceNumber = invoice.InvoiceNumber,
+                invoiceDate = invoice.InvoiceDate,
+                totalAmount = invoice.TotalAmount,
+                items = invoice.Items,
+                createdAt = invoice.CreatedAt,
+                isDuplicate = existingInvoice != null,
+                existingInvoiceId = existingInvoice?.Id,
+                existingInvoiceDate = existingInvoice?.InvoiceDate
+            };
+            
+            return Ok(response);
         }
         catch (Exception ex)
         {
@@ -54,13 +79,41 @@ public class InvoicesController : ControllerBase
         var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoiceDto.SupplierName);
         
         // 1.5. Get or create buyer (if TaxId provided)
-        Buyer? buyer = null;
+        Guid? buyerId = null;
         if (!string.IsNullOrWhiteSpace(invoiceDto.BuyerTaxId))
         {
-            buyer = await _supplierProductService.GetOrCreateBuyerAsync(
-                invoiceDto.BuyerTaxId,
-                invoiceDto.BuyerName
-            );
+            try
+            {
+                // Normalize TaxId to match how it's stored in the database
+                var normalizedTaxId = invoiceDto.BuyerTaxId.Replace("-", "").Replace(" ", "");
+                
+                // Get or create buyer - this ensures buyer exists in database
+                await _supplierProductService.GetOrCreateBuyerAsync(
+                    invoiceDto.BuyerTaxId,
+                    invoiceDto.BuyerName
+                );
+                
+                // Always query buyer from current context to ensure we have the correct ID
+                // This is more reliable than using the returned entity's ID
+                var buyer = await _context.Buyers
+                    .FirstOrDefaultAsync(b => b.TaxId == normalizedTaxId);
+                
+                if (buyer != null)
+                {
+                    buyerId = buyer.Id;
+                }
+                else
+                {
+                    // Buyer should exist at this point, log warning
+                    Console.WriteLine($"Warning: Buyer with TaxId {normalizedTaxId} was not found after creation");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error but continue with invoice creation (buyer will be null)
+                // This allows invoices to be created even if buyer creation fails
+                Console.WriteLine($"Error creating/getting buyer: {ex.Message}");
+            }
         }
         
         // 2. Check for duplicate invoice (same supplier + invoice number)
@@ -82,7 +135,7 @@ public class InvoicesController : ControllerBase
         {
             Id = invoiceDto.Id == Guid.Empty ? Guid.NewGuid() : invoiceDto.Id,
             SupplierId = supplier.Id,
-            BuyerId = buyer?.Id,
+            BuyerId = buyerId,
             SupplierName = invoiceDto.SupplierName,
             BuyerName = invoiceDto.BuyerName,
             BuyerTaxId = invoiceDto.BuyerTaxId,
