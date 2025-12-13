@@ -93,12 +93,19 @@ export const useProducts = () => {
         })
     }
 
+    const deleteProduct = async (id: string): Promise<void> => {
+        await apiFetch(`${apiBase}/api/products/${id}`, {
+            method: 'DELETE'
+        })
+    }
+
     return {
         getAllProducts,
         lookupProducts,
         getProduct,
         getProductHistory,
         compareProductPrices,
-        compareMultipleProducts
+        compareMultipleProducts,
+        deleteProduct
     }
 }

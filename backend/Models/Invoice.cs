@@ -13,6 +13,7 @@ public class Invoice
     
     public string SupplierName { get; set; } = string.Empty; // Keep temporarily for migration
     public string BuyerName { get; set; } = string.Empty; // Keep temporarily for migration
+    public string BuyerTaxId { get; set; } = string.Empty; // Keep temporarily for migration
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal TotalAmount { get; set; }

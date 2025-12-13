@@ -17,6 +17,7 @@ export interface Invoice {
     id: string;
     supplierName: string;
     buyerName?: string;
+    buyerTaxId?: string;
     invoiceNumber: string;
     invoiceDate: string;
     totalAmount: number;

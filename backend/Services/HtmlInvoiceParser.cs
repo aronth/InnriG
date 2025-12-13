@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using InnriGreifi.API.Models;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace InnriGreifi.API.Services;
@@ -32,6 +33,69 @@ public class HtmlInvoiceParser : IInvoiceParser
             CreatedAt = DateTime.UtcNow,
             InvoiceNumber = Path.GetFileNameWithoutExtension(fileName) // Fallback
         };
+
+        // Extract Invoice Number from HTML
+        // Strategy 1: Look for "REIKNINGUR" followed by number in h1 tag
+        var reikningurH1 = doc.DocumentNode.SelectSingleNode("//h1[contains(text(), 'REIKNINGUR') or contains(text(), 'Reikningur')]");
+        if (reikningurH1 != null)
+        {
+            var h1Text = reikningurH1.InnerText;
+            // Extract number after "REIKNINGUR" - could be space, dash, or directly after
+            var invoiceNumberMatch = Regex.Match(h1Text, @"(?:REIKNINGUR|Reikningur)[\s\-:]+([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
+            if (invoiceNumberMatch.Success)
+            {
+                invoice.InvoiceNumber = invoiceNumberMatch.Groups[1].Value.Trim();
+            }
+            else
+            {
+                // Fallback: extract any alphanumeric sequence after REIKNINGUR
+                var numberMatch = Regex.Match(h1Text, @"(?:REIKNINGUR|Reikningur)[\s]*([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
+                if (numberMatch.Success)
+                {
+                    invoice.InvoiceNumber = numberMatch.Groups[1].Value.Trim();
+                }
+            }
+        }
+        
+        // Strategy 2: Look for "Nr." or "Nr:" followed by number
+        if (string.IsNullOrEmpty(invoice.InvoiceNumber) || invoice.InvoiceNumber == Path.GetFileNameWithoutExtension(fileName))
+        {
+            var nrNodes = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Nr.') or contains(., 'Nr:') or contains(., 'Nr ')]]");
+            if (nrNodes != null)
+            {
+                foreach (var node in nrNodes)
+                {
+                    var text = node.InnerText;
+                    // Pattern: "Nr." or "Nr:" followed by whitespace and then the number
+                    var nrMatch = Regex.Match(text, @"Nr\.?\s*:?\s*([A-Za-z0-9\-]+)", RegexOptions.IgnoreCase);
+                    if (nrMatch.Success)
+                    {
+                        invoice.InvoiceNumber = nrMatch.Groups[1].Value.Trim();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Strategy 3: Look for document_details class with invoice number
+        if (string.IsNullOrEmpty(invoice.InvoiceNumber) || invoice.InvoiceNumber == Path.GetFileNameWithoutExtension(fileName))
+        {
+            var docDetailsNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'document_details')]");
+            if (docDetailsNode != null)
+            {
+                var h1InDetails = docDetailsNode.SelectSingleNode(".//h1");
+                if (h1InDetails != null)
+                {
+                    var h1Text = h1InDetails.InnerText;
+                    // Extract alphanumeric sequence (invoice number)
+                    var numberMatch = Regex.Match(h1Text, @"([A-Za-z0-9\-]+)");
+                    if (numberMatch.Success && !h1Text.Contains("REIKNINGUR", StringComparison.OrdinalIgnoreCase))
+                    {
+                        invoice.InvoiceNumber = numberMatch.Groups[1].Value.Trim();
+                    }
+                }
+            }
+        }
 
         var allText = doc.DocumentNode.InnerText;
         var lines = allText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
@@ -89,11 +153,14 @@ public class HtmlInvoiceParser : IInvoiceParser
         }
         if (string.IsNullOrEmpty(invoice.SupplierName)) invoice.SupplierName = "Unknown Supplier";
 
-        // 1.5. Extract Buyer (Kaupandi)
+        // 1.5. Extract Buyer (Kaupandi) and TaxId
+        string? buyerSectionText = null;
+        
         // Try new format first: buyer_info class
         var buyerInfoNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'buyer_info')]");
         if (buyerInfoNode != null)
         {
+            buyerSectionText = buyerInfoNode.InnerText;
             var buyerBoldNode = buyerInfoNode.SelectSingleNode(".//b");
             if (buyerBoldNode != null)
             {
@@ -122,6 +189,7 @@ public class HtmlInvoiceParser : IInvoiceParser
                     var parent = labelNode.ParentNode;
                     if (parent != null)
                     {
+                        buyerSectionText = parent.InnerText;
                         var boldNode = parent.SelectSingleNode(".//b");
                         if (boldNode != null)
                         {
@@ -164,9 +232,34 @@ public class HtmlInvoiceParser : IInvoiceParser
                             !string.IsNullOrWhiteSpace(line))
                         {
                             invoice.BuyerName = CleanBuyerName(line);
+                            buyerSectionText = line;
                             break;
                         }
                     }
+                }
+            }
+        }
+        
+        // Extract TaxId (Icelandic kennitala: 10 digits, may have dash)
+        if (!string.IsNullOrEmpty(buyerSectionText))
+        {
+            var taxIdMatch = Regex.Match(buyerSectionText, @"\b(\d{6}[-]?\d{4})\b");
+            if (taxIdMatch.Success)
+            {
+                invoice.BuyerTaxId = taxIdMatch.Groups[1].Value.Replace("-", ""); // Remove dash if present
+            }
+        }
+        
+        // Also try to find TaxId in UBLID spans or similar
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId))
+        {
+            var ublIdNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'UBLID')]");
+            if (ublIdNode != null)
+            {
+                var taxIdMatch = Regex.Match(ublIdNode.InnerText, @"\b(\d{6}[-]?\d{4})\b");
+                if (taxIdMatch.Success)
+                {
+                    invoice.BuyerTaxId = taxIdMatch.Groups[1].Value.Replace("-", "");
                 }
             }
         }
@@ -208,13 +301,8 @@ public class HtmlInvoiceParser : IInvoiceParser
         }
 
 
-        // 3. Extract Totals
-        // .payable_amount contains the total
-        var totalNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'payable_amount')]");
-        if (totalNode != null)
-        {
-             invoice.TotalAmount = ParseDecimal(totalNode.InnerText);
-        }
+        // 3. Extract Totals (with multiple fallback strategies)
+        invoice.TotalAmount = ExtractTotalAmount(doc);
 
         // 4. Parse Items using Sub-Parsers
         foreach (var parser in _subParsers)
@@ -230,6 +318,13 @@ public class HtmlInvoiceParser : IInvoiceParser
             }
         }
 
+        // 5. Final fallback: Calculate total from items if total is still 0
+        if (invoice.TotalAmount == 0 && invoice.Items != null && invoice.Items.Any())
+        {
+            // Sum up TotalPriceWithVat if available, otherwise sum TotalPrice
+            invoice.TotalAmount = invoice.Items.Sum(item => 
+                item.TotalPriceWithVat > 0 ? item.TotalPriceWithVat : item.TotalPrice);
+        }
 
         return invoice;
     }
@@ -240,24 +335,229 @@ public class HtmlInvoiceParser : IInvoiceParser
          return decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
     }
 
+    private decimal ExtractTotalAmount(HtmlDocument doc)
+    {
+        // Strategy 1: Try payable_amount class (most common in newer invoices)
+        var totalNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'payable_amount')]");
+        if (totalNode != null)
+        {
+            var amount = ParseDecimal(totalNode.InnerText);
+            if (amount > 0) return amount;
+        }
+
+        // Strategy 2: Try various total labels (final total with VAT) - this is the actual total
+        var totalLabelPatterns = new[]
+        {
+            "Samtala reiknings",
+            "Upphæð reiknings",
+            "Til greiðslu"
+        };
+
+        foreach (var pattern in totalLabelPatterns)
+        {
+            var totalNodes = doc.DocumentNode.SelectNodes($"//*[text()[contains(., '{pattern}') or contains(., '{pattern}:')]]");
+            if (totalNodes != null)
+            {
+                foreach (var node in totalNodes)
+                {
+                    // Look for the amount in the same row/container
+                    var parent = node.ParentNode;
+                    if (parent != null)
+                    {
+                        // Try to find a number in the parent's text (usually in a <b> tag or adjacent cell)
+                        var parentText = parent.InnerText;
+                        var amount = ParseDecimal(parentText);
+                        if (amount > 0) return amount;
+                        
+                        // Also check sibling nodes (for table cells)
+                        var siblings = parent.SelectNodes(".//td | .//b | .//p");
+                        if (siblings != null)
+                        {
+                            foreach (var sibling in siblings)
+                            {
+                                var siblingText = sibling.InnerText;
+                                if (IsDecimal(siblingText))
+                                {
+                                    amount = ParseDecimal(siblingText);
+                                    if (amount > 0) return amount;
+                                }
+                            }
+                        }
+                        
+                        // Check following siblings (for row-based layouts)
+                        var nextSibling = parent.NextSibling;
+                        while (nextSibling != null)
+                        {
+                            if (nextSibling.NodeType == HtmlAgilityPack.HtmlNodeType.Element)
+                            {
+                                var siblingAmount = ParseDecimal(nextSibling.InnerText);
+                                if (siblingAmount > 0) return siblingAmount;
+                            }
+                            nextSibling = nextSibling.NextSibling;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: Calculate from "Samtals:" (net) + "Samtals VSK:" (VAT)
+        // Look in upphaedsamantekt table
+        var upphaedTable = doc.DocumentNode.SelectSingleNode("//div[contains(@class, 'upphaedsamantekt')]");
+        if (upphaedTable != null)
+        {
+            decimal netTotal = 0;
+            decimal vatTotal = 0;
+            
+            // Find "Samtals:" row
+            var samtalsNodes = upphaedTable.SelectNodes(".//*[text()[contains(., 'Samtals:') and not(contains(., 'VSK'))]]");
+            if (samtalsNodes != null)
+            {
+                foreach (var node in samtalsNodes)
+                {
+                    var parent = node.ParentNode;
+                    if (parent != null)
+                    {
+                        var cells = parent.SelectNodes(".//td");
+                        if (cells != null && cells.Count >= 3)
+                        {
+                            // Amount is usually in the 3rd cell
+                            netTotal = ParseDecimal(cells[2].InnerText);
+                            if (netTotal > 0) break;
+                        }
+                    }
+                }
+            }
+            
+            // Find "Samtals VSK:" row
+            var vskNodes = upphaedTable.SelectNodes(".//*[text()[contains(., 'Samtals VSK:')]]");
+            if (vskNodes != null)
+            {
+                foreach (var node in vskNodes)
+                {
+                    var parent = node.ParentNode;
+                    if (parent != null)
+                    {
+                        var cells = parent.SelectNodes(".//td");
+                        if (cells != null && cells.Count >= 3)
+                        {
+                            vatTotal = ParseDecimal(cells[2].InnerText);
+                            if (vatTotal > 0) break;
+                        }
+                        else
+                        {
+                            // Sometimes VAT is in the same node text
+                            vatTotal = ParseDecimal(parent.InnerText);
+                            if (vatTotal > 0) break;
+                        }
+                    }
+                }
+            }
+            
+            if (netTotal > 0 && vatTotal > 0)
+            {
+                return netTotal + vatTotal;
+            }
+            else if (netTotal > 0)
+            {
+                // If we only have net total, return it (better than 0)
+                return netTotal;
+            }
+        }
+
+        // Strategy 4: Try finding "Samtals:" in any table and extract the largest number
+        var allSamtalsNodes = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Samtals')]]");
+        if (allSamtalsNodes != null)
+        {
+            decimal maxAmount = 0;
+            foreach (var node in allSamtalsNodes)
+            {
+                var parent = node.ParentNode;
+                if (parent != null)
+                {
+                    var cells = parent.SelectNodes(".//td");
+                    if (cells != null)
+                    {
+                        foreach (var cell in cells)
+                        {
+                            var amount = ParseDecimal(cell.InnerText);
+                            if (amount > maxAmount) maxAmount = amount;
+                        }
+                    }
+                    else
+                    {
+                        var amount = ParseDecimal(parent.InnerText);
+                        if (amount > maxAmount) maxAmount = amount;
+                    }
+                }
+            }
+            if (maxAmount > 0) return maxAmount;
+        }
+
+        // Strategy 5: Try text-based search for various total patterns
+        var allText = doc.DocumentNode.InnerText;
+        var textLines = allText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                           .Select(l => l.Trim())
+                           .Where(l => !string.IsNullOrWhiteSpace(l))
+                           .ToList();
+        foreach (var line in textLines)
+        {
+            if (line.Contains("Samtala reiknings", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Upphæð reiknings", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Til greiðslu", StringComparison.OrdinalIgnoreCase))
+            {
+                var amount = ParseDecimal(line);
+                if (amount > 0) return amount;
+            }
+        }
+
+        // Strategy 6: Calculate from items if available (will be done after items are parsed)
+        // This will be handled as a final fallback after items are parsed
+
+        return 0; // Will be recalculated from items if available
+    }
+
     private decimal ParseDecimal(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return 0;
-        // Clean input
-        // Icelandic: 1.000,00 -> remove dots, repl comma with dot
-        // Be careful with "10,00 KGM" -> regex extraction needed?
         
-        var match = Regex.Match(input, @"[\d.,]+");
-        if (!match.Success) return 0;
-
-        var valStr = match.Value;
+        // Decode HTML entities (e.g., &nbsp; becomes space)
+        input = System.Net.WebUtility.HtmlDecode(input);
         
-        var clean = valStr.Replace(".", "").Replace(",", ".");
-        if (decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+        // Remove common currency symbols and text
+        input = Regex.Replace(input, @"\b(ISK|kr|EUR|USD)\b", "", RegexOptions.IgnoreCase);
+        
+        // Find all potential numbers (Icelandic format: digits with dots and commas)
+        // Pattern: matches numbers like 137.214,00 or 1234,56 or 1000
+        var matches = Regex.Matches(input, @"\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?");
+        
+        if (matches.Count == 0) return 0;
+        
+        // If multiple matches, prefer the largest one (likely the total)
+        // Also prefer matches with decimal places (more likely to be amounts)
+        decimal maxAmount = 0;
+        decimal maxAmountWithDecimals = 0;
+        
+        foreach (Match match in matches)
         {
-            return result;
+            var valStr = match.Value;
+            
+            // Icelandic: 1.000,00 -> remove dots, repl comma with dot
+            var clean = valStr.Replace(".", "").Replace(",", ".");
+            
+            if (decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            {
+                if (result > maxAmount) maxAmount = result;
+                
+                // Prefer numbers with decimal places (more likely to be currency amounts)
+                if (valStr.Contains(",") && result > maxAmountWithDecimals)
+                {
+                    maxAmountWithDecimals = result;
+                }
+            }
         }
-        return 0;
+        
+        // Return the amount with decimals if found, otherwise the max amount
+        return maxAmountWithDecimals > 0 ? maxAmountWithDecimals : maxAmount;
     }
 
     private string CleanSupplierName(string rawName)

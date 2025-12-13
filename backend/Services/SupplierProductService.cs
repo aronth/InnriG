@@ -8,7 +8,7 @@ public interface ISupplierProductService
 {
     Task<Supplier> GetOrCreateSupplierAsync(string supplierName);
     Task<Product> GetOrCreateProductAsync(Guid supplierId, string productCode, string productName, string? unit);
-    Task<Buyer> GetOrCreateBuyerAsync(string buyerName, string? address = null, string? city = null, string? postalCode = null, string? country = null, string? taxId = null);
+    Task<Buyer> GetOrCreateBuyerAsync(string taxId, string? buyerName = null, string? address = null, string? city = null, string? postalCode = null, string? country = null);
 }
 
 public class SupplierProductService : ISupplierProductService
@@ -94,11 +94,19 @@ public class SupplierProductService : ISupplierProductService
         return product;
     }
 
-    public async Task<Buyer> GetOrCreateBuyerAsync(string buyerName, string? address = null, string? city = null, string? postalCode = null, string? country = null, string? taxId = null)
+    public async Task<Buyer> GetOrCreateBuyerAsync(string taxId, string? buyerName = null, string? address = null, string? city = null, string? postalCode = null, string? country = null)
     {
-        // Try to find existing buyer by name
+        if (string.IsNullOrWhiteSpace(taxId))
+        {
+            throw new ArgumentException("TaxId (SSN) is required to identify a buyer", nameof(taxId));
+        }
+
+        // Normalize TaxId (remove dashes, ensure 10 digits)
+        var normalizedTaxId = taxId.Replace("-", "").Replace(" ", "");
+        
+        // Try to find existing buyer by TaxId (primary identifier)
         var buyer = await _context.Buyers
-            .FirstOrDefaultAsync(b => b.Name == buyerName);
+            .FirstOrDefaultAsync(b => b.TaxId == normalizedTaxId);
 
         if (buyer == null)
         {
@@ -106,12 +114,12 @@ public class SupplierProductService : ISupplierProductService
             buyer = new Buyer
             {
                 Id = Guid.NewGuid(),
-                Name = buyerName,
+                TaxId = normalizedTaxId,
+                Name = buyerName ?? string.Empty,
                 Address = address,
                 City = city,
                 PostalCode = postalCode,
                 Country = country,
-                TaxId = taxId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -121,8 +129,14 @@ public class SupplierProductService : ISupplierProductService
         }
         else
         {
-            // Update buyer info if provided and different
+            // Update buyer info if provided and different (especially name, which can vary)
             var updated = false;
+            
+            if (!string.IsNullOrEmpty(buyerName) && buyer.Name != buyerName)
+            {
+                buyer.Name = buyerName;
+                updated = true;
+            }
             
             if (!string.IsNullOrEmpty(address) && buyer.Address != address)
             {
@@ -145,12 +159,6 @@ public class SupplierProductService : ISupplierProductService
             if (!string.IsNullOrEmpty(country) && buyer.Country != country)
             {
                 buyer.Country = country;
-                updated = true;
-            }
-            
-            if (!string.IsNullOrEmpty(taxId) && buyer.TaxId != taxId)
-            {
-                buyer.TaxId = taxId;
                 updated = true;
             }
 

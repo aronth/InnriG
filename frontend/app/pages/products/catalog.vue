@@ -250,18 +250,29 @@
                 <div v-else class="text-xs text-gray-400">-</div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-right">
-                <NuxtLink 
-                  :to="{
-                    path: `/products/${product.id}`,
-                    query: filters.supplierId ? { supplierId: filters.supplierId } : {}
-                  }"
-                  class="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow-md font-medium"
-                >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  Skoða
-                </NuxtLink>
+                <div class="flex items-center justify-end gap-2">
+                  <NuxtLink 
+                    :to="{
+                      path: `/products/${product.id}`,
+                      query: filters.supplierId ? { supplierId: filters.supplierId } : {}
+                    }"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow-md font-medium"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Skoða
+                  </NuxtLink>
+                  <button
+                    @click="confirmDeleteProduct(product)"
+                    class="inline-flex items-center px-2 py-1.5 text-xs font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                    title="Eyða vöru"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -349,13 +360,58 @@
         Lesa inn reikning
       </NuxtLink>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal && deletingProduct" class="fixed z-50 inset-0 overflow-y-auto" @click.self="showDeleteModal = false">
+      <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showDeleteModal = false"></div>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div class="sm:flex sm:items-start">
+              <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Eyða vöru</h3>
+                <div class="mt-2">
+                  <p class="text-sm text-gray-500">
+                    Ertu viss um að þú viljir eyða vörunni <strong>{{ deletingProduct.name }}</strong> ({{ deletingProduct.productCode }})? 
+                    Þessi aðgerð er óafturkræf.
+                  </p>
+                  <p class="text-sm text-red-600 mt-2 font-medium">
+                    Varan verður aðeins eytt ef hún er ekki notuð í neinum reikningum.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button
+              @click="handleDeleteProduct"
+              :disabled="isDeleting"
+              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+            >
+              {{ isDeleting ? 'Eyði...' : 'Eyða' }}
+            </button>
+            <button
+              @click="showDeleteModal = false"
+              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+            >
+              Hætta við
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 const route = useRoute()
 const router = useRouter()
-const { getAllProducts, lookupProducts } = useProducts()
+const { getAllProducts, lookupProducts, deleteProduct } = useProducts()
 const { getAllSuppliers } = useSuppliers()
 
 const paginatedData = ref<Awaited<ReturnType<typeof getAllProducts>> | null>(null)
@@ -602,6 +658,32 @@ watch(() => route.query, () => {
 }, { deep: true })
 
 // Fetch on mount
+// Delete modal
+const showDeleteModal = ref(false)
+const isDeleting = ref(false)
+const deletingProduct = ref<any>(null)
+
+const confirmDeleteProduct = (product: any) => {
+  deletingProduct.value = product
+  showDeleteModal.value = true
+}
+
+const handleDeleteProduct = async () => {
+  if (!deletingProduct.value) return
+  
+  isDeleting.value = true
+  try {
+    await deleteProduct(deletingProduct.value.id)
+    showDeleteModal.value = false
+    deletingProduct.value = null
+    await fetchData()
+  } catch (err: any) {
+    alert(err.data?.message || err.message || 'Mistókst að eyða vöru')
+  } finally {
+    isDeleting.value = false
+  }
+}
+
 onMounted(() => {
   initializeFromQuery()
   fetchData()

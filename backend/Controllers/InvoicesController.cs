@@ -53,11 +53,14 @@ public class InvoicesController : ControllerBase
         // 1. Get or create supplier
         var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoiceDto.SupplierName);
         
-        // 1.5. Get or create buyer (if provided)
+        // 1.5. Get or create buyer (if TaxId provided)
         Buyer? buyer = null;
-        if (!string.IsNullOrWhiteSpace(invoiceDto.BuyerName))
+        if (!string.IsNullOrWhiteSpace(invoiceDto.BuyerTaxId))
         {
-            buyer = await _supplierProductService.GetOrCreateBuyerAsync(invoiceDto.BuyerName);
+            buyer = await _supplierProductService.GetOrCreateBuyerAsync(
+                invoiceDto.BuyerTaxId,
+                invoiceDto.BuyerName
+            );
         }
         
         // 2. Check for duplicate invoice (same supplier + invoice number)
@@ -82,6 +85,7 @@ public class InvoicesController : ControllerBase
             BuyerId = buyer?.Id,
             SupplierName = invoiceDto.SupplierName,
             BuyerName = invoiceDto.BuyerName,
+            BuyerTaxId = invoiceDto.BuyerTaxId,
             InvoiceNumber = invoiceDto.InvoiceNumber,
             InvoiceDate = invoiceDto.InvoiceDate.Kind == DateTimeKind.Unspecified 
                 ? DateTime.SpecifyKind(invoiceDto.InvoiceDate, DateTimeKind.Utc)
@@ -242,5 +246,22 @@ public class InvoicesController : ControllerBase
         if (invoice == null) return NotFound();
         
         return Ok(invoice);
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteInvoice(Guid id)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Items)
+            .FirstOrDefaultAsync(i => i.Id == id);
+        
+        if (invoice == null)
+            return NotFound();
+
+        // Delete invoice (items will be cascade deleted due to foreign key configuration)
+        _context.Invoices.Remove(invoice);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 }

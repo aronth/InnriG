@@ -20,7 +20,7 @@ public class BuyersController : ControllerBase
     public async Task<IActionResult> GetBuyers()
     {
         var buyers = await _context.Buyers
-            .OrderBy(b => b.Name)
+            .OrderBy(b => b.TaxId)
             .ToListAsync();
         
         return Ok(buyers);

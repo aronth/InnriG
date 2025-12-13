@@ -402,6 +402,17 @@ public class ProductsController : ControllerBase
         if (product == null)
             return NotFound();
 
+        // Check if any invoice items reference this product
+        var hasInvoiceItems = await _context.InvoiceItems
+            .AnyAsync(ii => ii.ProductId == id);
+
+        if (hasInvoiceItems)
+        {
+            return BadRequest(new { 
+                message = "Ekki er hægt að eyða vöru sem er notuð í reikningum. Eyða verður fyrst öllum reikningum sem innihalda þessa vöru." 
+            });
+        }
+
         _context.Products.Remove(product);
         await _context.SaveChangesAsync();
 

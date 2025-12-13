@@ -16,7 +16,23 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">
-              Kaupandi
+              Kaupandi (Kennitala)
+              <span class="text-red-500">*</span>
+            </label>
+            <input 
+              v-model="localInvoice.buyerTaxId" 
+              class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border bg-white font-mono"
+              placeholder="4411110370"
+              pattern="[0-9]{6}[-]?[0-9]{4}"
+              maxlength="11"
+            />
+            <p class="text-xs text-gray-500 mt-1">10 stafir (Kennitala)</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">
+              Nafn kaupanda
               <span class="text-gray-400 font-normal">(valfrjálst)</span>
             </label>
             <input 
@@ -25,6 +41,7 @@
               placeholder="Nafn kaupanda"
             />
           </div>
+          <div></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -130,9 +147,14 @@ watch(() => props.invoice, (newVal) => {
     if (newVal) {
         // Deep clone to avoid mutating prop directly
         localInvoice.value = JSON.parse(JSON.stringify(newVal));
-        // Ensure buyerName exists (even if empty)
-        if (localInvoice.value && !localInvoice.value.buyerName) {
-            localInvoice.value.buyerName = '';
+        // Ensure buyer fields exist (even if empty)
+        if (localInvoice.value) {
+            if (!localInvoice.value.buyerName) {
+                localInvoice.value.buyerName = '';
+            }
+            if (!localInvoice.value.buyerTaxId) {
+                localInvoice.value.buyerTaxId = '';
+            }
         }
     }
 }, { immediate: true });

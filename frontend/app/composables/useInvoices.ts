@@ -52,9 +52,16 @@ export const useInvoices = () => {
         return await apiFetch(`${apiBase}/api/invoices/${id}`)
     }
 
+    const deleteInvoice = async (id: string): Promise<void> => {
+        await apiFetch(`${apiBase}/api/invoices/${id}`, {
+            method: 'DELETE'
+        })
+    }
+
     return {
         getAllInvoices,
-        getInvoice
+        getInvoice,
+        deleteInvoice
     }
 }
 

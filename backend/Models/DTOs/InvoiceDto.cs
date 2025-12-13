@@ -5,6 +5,7 @@ public class InvoiceConfirmDto
     public Guid Id { get; set; }
     public string SupplierName { get; set; } = string.Empty;
     public string BuyerName { get; set; } = string.Empty;
+    public string BuyerTaxId { get; set; } = string.Empty; // SSN/Kennitala - Required for buyer identification
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal TotalAmount { get; set; }

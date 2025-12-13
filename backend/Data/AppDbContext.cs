@@ -26,7 +26,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         
         // Buyer Configuration
         modelBuilder.Entity<Buyer>()
-            .HasIndex(b => b.Name)
+            .HasIndex(b => b.TaxId)
             .IsUnique();
         
         // Product Configuration
