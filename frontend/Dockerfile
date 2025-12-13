@@ -1,4 +1,4 @@
-FROM node:18 AS build
+FROM node:20 AS build
 WORKDIR /app
 COPY package*.json ./
 # Install dependencies with npm ci for reproducible builds
@@ -16,7 +16,7 @@ RUN npm run postinstall
 COPY . .
 RUN npm run build
 
-FROM node:18-slim AS runtime
+FROM node:20-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
