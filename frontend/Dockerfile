@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 # npm ci ensures reproducible builds by installing exact versions from package-lock.json
 # It also installs optional dependencies by default, including native bindings
-RUN npm ci
+RUN npm install
 COPY . .
 RUN npm run build
 
