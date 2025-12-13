@@ -1,0 +1,113 @@
+# InnriGreifi - Cursor Rules
+
+## Important: Read agents.md First
+
+**Before making any changes, read `agents.md` for comprehensive project guidelines, conventions, and patterns.**
+
+## Quick Reference Rules
+
+### Stack
+- Backend: .NET 9 Web API with PostgreSQL
+- Frontend: Nuxt 4 (Vue 3) with TypeScript and Tailwind CSS
+- Database: PostgreSQL 15 with Entity Framework Core
+
+### Critical Conventions
+
+**Backend (C#):**
+- Use PascalCase for classes, methods, properties
+- Use `_camelCase` for private fields
+- Always use async/await for database operations
+- Controllers should be thin - delegate to services
+- Use DTOs for complex requests/responses
+- All dates stored as UTC (`DateTime.UtcNow`)
+
+**Frontend (Vue/TypeScript):**
+- Use `<script setup lang="ts">` syntax
+- Components: PascalCase.vue
+- Composables: camelCase.ts with `use` prefix
+- Use `$fetch` for API calls (from Nuxt)
+- Use composables to encapsulate API logic
+- Display dates/currency in Icelandic locale (`is-IS`)
+
+**Database:**
+- All money fields: `decimal` with precision (18, 2)
+- Quantity: `decimal` with precision (18, 3)
+- Foreign keys use Restrict (except InvoiceItem → Invoice: Cascade)
+- Unique constraints: Supplier.Name, Product(SupplierId, ProductCode)
+
+### Business Logic
+
+**Invoice Processing:**
+- Two-step process: `POST /api/invoices/upload` → `POST /api/invoices/confirm`
+- Auto-creates Supplier and Product if not exists
+- Product uniqueness: (SupplierId, ProductCode)
+- Use `SupplierProductService` for get-or-create operations
+
+**Number Formatting:**
+- Icelandic format: `1.000,00` (dots = thousands, comma = decimal)
+- Parse: Remove dots, replace comma with dot
+- Display: Use `Intl.NumberFormat('is-IS')`
+
+**Date Handling:**
+- Store as UTC in database
+- Parse Icelandic format: `dd.MM.yyyy`
+- Display in `is-IS` locale
+
+### API Patterns
+
+- RESTful routes: `GET /api/{resource}`, `GET /api/{resource}/{id}`, etc.
+- Use appropriate HTTP status codes (200, 201, 204, 400, 404)
+- CORS configured for `http://localhost:3000`
+- Use `[FromQuery]` for query parameters
+- Use `[FromBody]` for POST/PUT requests
+
+### File Organization
+
+- Controllers in `backend/Controllers/`
+- Services in `backend/Services/`
+- Models in `backend/Models/` (DTOs in subfolder)
+- Vue components in `frontend/app/components/`
+- Composables in `frontend/app/composables/`
+- Pages in `frontend/app/pages/` (file-based routing)
+
+### Error Handling
+
+- Backend: Return meaningful error messages with appropriate status codes
+- Frontend: Show user-friendly messages in Icelandic
+- Always handle async errors with try/catch
+- Show loading states during async operations
+
+### Testing
+
+- Test invoice parsing with files in `example_invoices/`
+- Use EF Core migrations for schema changes
+- Run migrations: `dotnet ef database update`
+
+## When Adding New Features
+
+1. **Read `agents.md`** for detailed patterns
+2. Follow existing code structure and naming conventions
+3. Use services for business logic (not controllers)
+4. Maintain data integrity (respect foreign key constraints)
+5. Handle Icelandic locale for dates/numbers
+6. Update `agents.md` if adding new patterns
+
+## Common Mistakes to Avoid
+
+- ❌ Don't put business logic in controllers
+- ❌ Don't forget to handle UTC for dates
+- ❌ Don't use string concatenation for SQL (use EF Core)
+- ❌ Don't forget Icelandic number format parsing
+- ❌ Don't create duplicate products (check SupplierId + ProductCode)
+- ❌ Don't skip the two-step invoice process (upload → confirm)
+
+## Questions?
+
+Refer to `agents.md` for comprehensive documentation on:
+- Complete architecture patterns
+- Detailed code conventions
+- Full database schema
+- Complete API documentation
+- Development workflow
+- And much more...
+
