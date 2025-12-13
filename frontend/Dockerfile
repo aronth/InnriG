@@ -1,13 +1,13 @@
-FROM node:18-alpine AS build
+FROM node:18 AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:18-alpine AS runtime
+FROM node:18-slim AS runtime
 WORKDIR /app
-RUN apk add --no-cache wget
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3000
