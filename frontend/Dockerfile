@@ -4,9 +4,13 @@ COPY package*.json ./
 # Install dependencies with npm ci for reproducible builds
 # Use --ignore-scripts to prevent postinstall from running before optional deps are ready
 RUN npm ci --ignore-scripts
-# Explicitly install the required optional dependency for linux-x64-gnu
-# This ensures the native binding is available before nuxt prepare runs
-RUN npm install --no-save @oxc-parser/binding-linux-x64-gnu@0.102.0 || true
+# Explicitly install all required optional dependencies for linux-x64-gnu
+# Nuxt 4 uses multiple oxc packages (parser, transform, minify) that need native bindings
+# This ensures all native bindings are available before nuxt prepare runs
+RUN npm install --no-save \
+    @oxc-parser/binding-linux-x64-gnu@0.102.0 \
+    @oxc-transform/binding-linux-x64-gnu@0.102.0 \
+    @oxc-minify/binding-linux-x64-gnu@0.102.0 || true
 # Now run postinstall script (nuxt prepare) after native bindings are installed
 RUN npm run postinstall
 COPY . .
