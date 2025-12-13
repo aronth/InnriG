@@ -1,9 +1,14 @@
 FROM node:18 AS build
 WORKDIR /app
 COPY package*.json ./
-# npm ci ensures reproducible builds by installing exact versions from package-lock.json
-# It also installs optional dependencies by default, including native bindings
-RUN npm install
+# Install dependencies with npm ci for reproducible builds
+# Use --ignore-scripts to prevent postinstall from running before optional deps are ready
+RUN npm ci --ignore-scripts
+# Explicitly install the required optional dependency for linux-x64-gnu
+# This ensures the native binding is available before nuxt prepare runs
+RUN npm install --no-save @oxc-parser/binding-linux-x64-gnu@0.102.0 || true
+# Now run postinstall script (nuxt prepare) after native bindings are installed
+RUN npm run postinstall
 COPY . .
 RUN npm run build
 
