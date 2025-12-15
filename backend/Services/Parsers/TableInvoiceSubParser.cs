@@ -32,6 +32,8 @@ public class TableInvoiceSubParser : IInvoiceSubParser
 
         HtmlNode itemsTable = null;
         HtmlNode discountsTable = null;
+        var detailedLineInfo = ExtractDetailedLineInfo(doc);
+        var detailedByItemId = ExtractDetailedLineInfoByItemId(doc);
 
         // Identify tables
         foreach (var table in tables)
@@ -66,8 +68,8 @@ public class TableInvoiceSubParser : IInvoiceSubParser
 
                     // Col 0: "2." -> Line Number
                     // Robust extraction: Remove all non-digits
-                    var lineNumStr = Regex.Replace(cells[0].InnerText, @"[^\d]", "");
-                    if (!int.TryParse(lineNumStr, out var lineNum)) continue;
+                    var lineNum = ExtractLineNumber(cells[0].InnerText);
+                    if (lineNum == 0) continue;
 
                     // Col 3: Listaverð "309,00"
                     var listPrice = ParseDecimal(cells[3].InnerText);
@@ -99,8 +101,7 @@ public class TableInvoiceSubParser : IInvoiceSubParser
                     if (string.IsNullOrWhiteSpace(cells[1].InnerText)) continue;
 
                     // Extract Line Number from Col 0 "1."
-                    var lineNumStr = Regex.Replace(cells[0].InnerText, @"[^\d]", "");
-                    int.TryParse(lineNumStr, out var currentLineNum);
+                    var currentLineNum = ExtractLineNumber(cells[0].InnerText);
 
                     var itemId = cells[1].InnerText.Trim();
                     if (string.IsNullOrWhiteSpace(itemId) || itemId.StartsWith("Samtals", StringComparison.OrdinalIgnoreCase)) continue;
@@ -125,11 +126,67 @@ public class TableInvoiceSubParser : IInvoiceSubParser
                     // Resolve List Price
                     decimal listPrice = unitPrice; // Default to unit price if no detailed info
                     decimal discount = 0;
-                    
-                    if (extraInfo.ContainsKey(currentLineNum))
+                    decimal discountPercent = 0;
+
+                    if (detailedByItemId.TryGetValue(itemId, out var detailById))
+                    {
+                        if (detailById.SalesPrice.HasValue && detailById.SalesPrice.Value > 0)
+                        {
+                            listPrice = detailById.SalesPrice.Value;
+                        }
+
+                        if (detailById.LineAmount.HasValue && detailById.LineAmount.Value > 0)
+                        {
+                            var qtyForCalc = qty != 0 ? qty : 1;
+                            var discountedUnitPrice = detailById.LineAmount.Value / qtyForCalc;
+                            unitPrice = discountedUnitPrice;
+                            total = detailById.LineAmount.Value;
+
+                            if (discount == 0 && listPrice > 0 && discountedUnitPrice > 0)
+                            {
+                                var calculatedDiscount = listPrice - discountedUnitPrice;
+                                if (calculatedDiscount > 0)
+                                {
+                                    discount = calculatedDiscount;
+                                    discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                }
+                            }
+                        }
+                    }
+                    else if (extraInfo.ContainsKey(currentLineNum))
                     {
                         listPrice = extraInfo[currentLineNum].ListPrice;
                         discount = extraInfo[currentLineNum].Discount;
+                        if (listPrice > 0 && discount > 0)
+                        {
+                            discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                        }
+                    }
+
+                    if (detailedLineInfo.TryGetValue(currentLineNum, out var detailed))
+                    {
+                        if (detailed.SalesPrice.HasValue && detailed.SalesPrice.Value > 0)
+                        {
+                            listPrice = detailed.SalesPrice.Value;
+                        }
+
+                        if (detailed.LineAmount.HasValue && detailed.LineAmount.Value > 0)
+                        {
+                            var qtyForCalc = qty != 0 ? qty : 1;
+                            var discountedUnitPrice = detailed.LineAmount.Value / qtyForCalc;
+                            unitPrice = discountedUnitPrice;
+                            total = detailed.LineAmount.Value;
+
+                            if (discount == 0 && listPrice > 0 && discountedUnitPrice > 0)
+                            {
+                                var calculatedDiscount = listPrice - discountedUnitPrice;
+                                if (calculatedDiscount > 0)
+                                {
+                                    discount = calculatedDiscount;
+                                    discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                }
+                            }
+                        }
                     }
 
                     var item = new InvoiceItem
@@ -142,7 +199,7 @@ public class TableInvoiceSubParser : IInvoiceSubParser
                         Unit = unit,
                         UnitPrice = unitPrice,
                         ListPrice = listPrice,
-                        Discount = discount,
+                        Discount = discountPercent, // store percentage instead of amount
                         VatCode = vatCode,
                         TotalPrice = total,
                         TotalPriceWithVat = totalWithVat
@@ -160,6 +217,124 @@ public class TableInvoiceSubParser : IInvoiceSubParser
         return items;
     }
 
+    private Dictionary<int, (decimal? SalesPrice, decimal? LineAmount)> ExtractDetailedLineInfo(HtmlDocument doc)
+    {
+        var map = new Dictionary<int, (decimal? SalesPrice, decimal? LineAmount)>();
+
+        // Find the detail table that contains the OES* values
+        HtmlNode? detailTable = doc.DocumentNode
+            .SelectSingleNode("//div[contains(normalize-space(text()), 'Ítarupplýsingar á línum')]/following::table[1]");
+
+        // Fallback: any table containing OESSalesPrice
+        detailTable ??= doc.DocumentNode.SelectSingleNode("//table[.//text()[contains(., 'OESSalesPrice')]]");
+        if (detailTable == null) return map;
+
+        var rows = detailTable.SelectNodes(".//tr");
+        if (rows == null) return map;
+
+        var currentLine = -1;
+        foreach (var row in rows)
+        {
+            var cells = row.SelectNodes("./td");
+            // Only set line number on top-level detail rows (avoid nested tables where amounts appear)
+            if (cells != null && cells.Count > 1 && IsTopLevelDetailRow(row, detailTable))
+            {
+                var maybeLine = ExtractLineNumber(cells[1].InnerText);
+                if (maybeLine > 0)
+                {
+                    currentLine = maybeLine;
+                }
+            }
+
+            var nestedDetailTable = row.SelectSingleNode(".//table[.//text()[contains(., 'OESSalesPrice')]]");
+            if (nestedDetailTable != null && currentLine > 0)
+            {
+                decimal? salesPrice = null;
+                decimal? lineAmount = null;
+
+                var salesPriceNode = nestedDetailTable.SelectSingleNode(".//td[contains(., 'OESSalesPrice')]");
+                if (salesPriceNode != null)
+                {
+                    salesPrice = ParseDecimal(salesPriceNode.InnerText);
+                }
+
+                var lineAmountNode = nestedDetailTable.SelectSingleNode(".//td[contains(., 'OESLineAmount')]");
+                if (lineAmountNode != null)
+                {
+                    lineAmount = ParseDecimal(lineAmountNode.InnerText);
+                }
+
+                map[currentLine] = (salesPrice, lineAmount);
+            }
+        }
+
+        return map;
+    }
+
+    private Dictionary<string, (decimal? SalesPrice, decimal? LineAmount)> ExtractDetailedLineInfoByItemId(HtmlDocument doc)
+    {
+        var map = new Dictionary<string, (decimal? SalesPrice, decimal? LineAmount)>(StringComparer.OrdinalIgnoreCase);
+
+        HtmlNode? detailTable = doc.DocumentNode
+            .SelectSingleNode("//div[contains(normalize-space(text()), 'Ítarupplýsingar á línum')]/following::table[1]");
+        detailTable ??= doc.DocumentNode.SelectSingleNode("//table[.//text()[contains(., 'OESSalesPrice')]]");
+        if (detailTable == null) return map;
+
+        var rows = detailTable.SelectNodes(".//tr");
+        if (rows == null || rows.Count < 3) return map;
+
+        for (int i = 0; i < rows.Count - 2; i++)
+        {
+            var firstRowCells = rows[i].SelectNodes("./td");
+            if (firstRowCells == null || firstRowCells.Count < 3) continue;
+            var itemId = firstRowCells[2].InnerText.Trim();
+            if (string.IsNullOrWhiteSpace(itemId)) continue;
+
+            var thirdRow = rows[i + 2];
+            var nestedDetailTable = thirdRow.SelectSingleNode(".//table[.//text()[contains(., 'OESSalesPrice')]]");
+            if (nestedDetailTable == null) continue;
+
+            decimal? salesPrice = null;
+            decimal? lineAmount = null;
+
+            var salesPriceNode = nestedDetailTable.SelectSingleNode(".//td[contains(., 'OESSalesPrice')]");
+            if (salesPriceNode != null)
+            {
+                salesPrice = ParseDecimal(salesPriceNode.InnerText);
+            }
+
+            var lineAmountNode = nestedDetailTable.SelectSingleNode(".//td[contains(., 'OESLineAmount')]");
+            if (lineAmountNode != null)
+            {
+                lineAmount = ParseDecimal(lineAmountNode.InnerText);
+            }
+
+            map[itemId] = (salesPrice, lineAmount);
+
+            i += 2; // skip the name row and detail table row we just consumed
+        }
+
+        return map;
+    }
+
+    private bool IsTopLevelDetailRow(HtmlNode row, HtmlNode detailTable)
+    {
+        // Top-level rows are direct children of the detail table (or its tbody)
+        return row.ParentNode == detailTable ||
+               (row.ParentNode?.ParentNode != null && row.ParentNode.ParentNode == detailTable);
+    }
+
+    private int ExtractLineNumber(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return 0;
+
+        // Some invoices use "1.0000000000." — take the first integer chunk.
+        var match = Regex.Match(input, @"\d+");
+        if (!match.Success) return 0;
+
+        return int.TryParse(match.Value, out var result) ? result : 0;
+    }
+
     private string CleanName(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
@@ -173,16 +348,31 @@ public class TableInvoiceSubParser : IInvoiceSubParser
     private decimal ParseDecimal(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return 0;
-        var match = Regex.Match(input, @"[\d.,]+");
+
+        // Detect decimal separator: if there's a comma, we assume Icelandic (comma decimal, dot thousands).
+        // If there's no comma but there is a dot, we treat dot as decimal separator (en-US style).
+        var hasComma = input.Contains(',');
+        var hasDot = input.Contains('.');
+
+        var match = Regex.Match(input, @"[\d\.,]+");
         if (!match.Success) return 0;
 
         var valStr = match.Value;
-        // Icelandic: 1.000,00 -> remove dots, repl comma with dot
-        var clean = valStr.Replace(".", "").Replace(",", ".");
-        if (decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+
+        string clean;
+        if (hasComma)
         {
-            return result;
+            // Icelandic style: strip thousand dots, turn comma into dot
+            clean = valStr.Replace(".", "").Replace(",", ".");
         }
-        return 0;
+        else
+        {
+            // Dot decimal (or integer with dots already stripped by regex)
+            clean = valStr;
+        }
+
+        return decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out var result)
+            ? result
+            : 0;
     }
 }
