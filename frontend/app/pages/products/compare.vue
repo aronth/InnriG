@@ -450,6 +450,12 @@ const renderChart = async () => {
   const ctx = chartCanvas.value.getContext('2d')
   if (!ctx) return
 
+  // Guard against existing chart on this canvas (Nuxt hydration/re-render)
+  const existingChart = Chart.getChart(ctx.canvas)
+  if (existingChart) {
+    existingChart.destroy()
+  }
+
   // Collect all unique dates from all products
   const allDates = new Set<string>()
   comparisonResults.value.forEach((result: any) => {
