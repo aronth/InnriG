@@ -875,15 +875,21 @@ public class ProductsController : ControllerBase
         // Data rows
         foreach (dynamic item in data)
         {
+            // Safely get nullable decimal values
+            var latestPrice = item.LatestPrice as decimal?;
+            var listPrice = item.ListPrice as decimal?;
+            var discount = item.Discount as decimal?;
+            var lastPurchaseDate = item.LastPurchaseDate as DateTime?;
+            
             csv.AppendLine($"{EscapeCsv(item.SupplierName)}," +
                           $"{EscapeCsv(item.ProductCode)}," +
                           $"{EscapeCsv(item.Name)}," +
                           $"{EscapeCsv(item.Description ?? "")}," +
                           $"{EscapeCsv(item.CurrentUnit ?? "")}," +
-                          $"{(item.LatestPrice.HasValue ? item.LatestPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
-                          $"{(item.ListPrice.HasValue ? item.ListPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
-                          $"{(item.Discount.HasValue ? item.Discount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
-                          $"{(item.LastPurchaseDate.HasValue ? item.LastPurchaseDate.Value.ToString("yyyy-MM-dd") : "")}");
+                          $"{(latestPrice.HasValue ? latestPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(listPrice.HasValue ? listPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(discount.HasValue ? discount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(lastPurchaseDate.HasValue ? lastPurchaseDate.Value.ToString("yyyy-MM-dd") : "")}");
         }
         
         return csv.ToString();

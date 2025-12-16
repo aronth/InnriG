@@ -58,10 +58,31 @@ export const useInvoices = () => {
         })
     }
 
+    const bulkUploadInvoices = async (files: File[]): Promise<BulkUploadResult> => {
+        const formData = new FormData()
+        files.forEach(file => {
+            formData.append('files', file)
+        })
+
+        return await apiFetch<BulkUploadResult>(`${apiBase}/api/invoices/bulk-upload`, {
+            method: 'POST',
+            body: formData
+        })
+    }
+
     return {
         getAllInvoices,
         getInvoice,
-        deleteInvoice
+        deleteInvoice,
+        bulkUploadInvoices
     }
+}
+
+export interface BulkUploadResult {
+    total: number
+    successful: number
+    skipped: number
+    failed: number
+    errors: string[]
 }
 

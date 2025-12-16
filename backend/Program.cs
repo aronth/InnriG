@@ -75,7 +75,23 @@ builder.Services.AddScoped<IInvoiceParser, HtmlInvoiceParser>();
 builder.Services.AddScoped<ISupplierProductService, SupplierProductService>();
 
 // HttpClient for web scraping and Pushover
-builder.Services.AddHttpClient<IWaitTimeScraper, WaitTimeScraper>();
+builder.Services.AddHttpClient<IWaitTimeScraper, WaitTimeScraper>()
+    .ConfigurePrimaryHttpMessageHandler(() =>
+    {
+        var handler = new HttpClientHandler();
+        
+        // Configure SSL certificate validation based on appsettings
+        var allowInvalidCertificates = builder.Configuration.GetValue<bool>("WaitTimeScraper:AllowInvalidCertificates", false);
+        
+        if (allowInvalidCertificates)
+        {
+            // Allow invalid certificates (e.g., name mismatch, self-signed)
+            // This is useful for scraping sites with certificate issues
+            handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+        }
+        
+        return handler;
+    });
 builder.Services.AddHttpClient<IPushoverService, PushoverService>();
 
 // Wait time monitoring services (registered via HttpClient above)
@@ -84,6 +100,14 @@ builder.Services.AddScoped<IPushoverService, PushoverService>();
 builder.Services.AddHostedService<WaitTimeMonitoringService>();
 
 var app = builder.Build();
+
+// Log SSL certificate validation setting
+var allowInvalidCertificates = app.Configuration.GetValue<bool>("WaitTimeScraper:AllowInvalidCertificates", false);
+if (allowInvalidCertificates)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning("WaitTimeScraper: SSL certificate validation is DISABLED. This should only be enabled in development.");
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -158,5 +182,40 @@ async Task SeedDatabaseAsync(WebApplication app)
         {
             logger.LogInformation("Default user seeded successfully");
         }
+    }
+    
+    // Assign default buyer to invoices without buyer
+    var invoicesWithoutBuyer = await context.Invoices
+        .Where(i => i.BuyerId == null)
+        .ToListAsync();
+    
+    if (invoicesWithoutBuyer.Any())
+    {
+        logger.LogInformation("Found {Count} invoice(s) without buyer ID", invoicesWithoutBuyer.Count);
+        
+        var defaultBuyer = await context.Buyers
+            .FirstOrDefaultAsync(b => b.TaxId == "4411110370");
+        
+        if (defaultBuyer != null)
+        {
+            logger.LogInformation("Found buyer with TaxId 4411110370: {BuyerName} (ID: {BuyerId})", 
+                defaultBuyer.Name, defaultBuyer.Id);
+            
+            foreach (var invoice in invoicesWithoutBuyer)
+            {
+                invoice.BuyerId = defaultBuyer.Id;
+            }
+            
+            await context.SaveChangesAsync();
+            logger.LogInformation("Assigned buyer to {Count} invoice(s)", invoicesWithoutBuyer.Count);
+        }
+        else
+        {
+            logger.LogWarning("Buyer with TaxId 4411110370 not found. Cannot assign buyer to invoices.");
+        }
+    }
+    else
+    {
+        logger.LogInformation("No invoices without buyer ID found");
     }
 }

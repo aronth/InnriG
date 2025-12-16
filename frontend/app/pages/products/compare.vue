@@ -30,28 +30,38 @@
             class="w-full px-6 py-4 pr-32 text-lg border-2 border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-md"
           />
           <button 
-            @click="addSelectedProduct"
-            :disabled="!selectedProduct || isLoading"
+            @click="addCheckedProducts"
+            :disabled="checkedProducts.size === 0 || isLoading"
             class="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Bæta við
+            Bæta við ({{ checkedProducts.size }})
           </button>
-        </div>
 
-        <!-- Autocomplete Dropdown -->
-        <div 
-          v-if="showDropdown && searchResults.length > 0"
-          class="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border-2 border-indigo-100 max-h-96 overflow-y-auto"
-        >
+          <!-- Autocomplete Dropdown -->
+          <div 
+            v-if="showDropdown && searchResults.length > 0"
+            class="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border-2 border-indigo-100 max-h-96 overflow-y-auto top-full"
+          >
           <div 
             v-for="(product, index) in searchResults" 
             :key="product.id"
-            @click="selectProduct(product)"
+            @click="toggleProductCheck(product.id)"
             @mouseenter="selectedIndex = index"
             class="px-6 py-4 cursor-pointer transition-colors"
             :class="selectedIndex === index ? 'bg-indigo-50' : 'hover:bg-gray-50'"
           >
-            <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <!-- Checkbox -->
+              <div class="flex-shrink-0">
+                <input 
+                  type="checkbox"
+                  :checked="checkedProducts.has(product.id)"
+                  @click.stop="toggleProductCheck(product.id)"
+                  class="w-5 h-5 text-indigo-600 border-2 border-gray-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer"
+                />
+              </div>
+              
+              <!-- Product Info -->
               <div class="flex-1">
                 <div class="font-semibold text-gray-800">{{ product.name }}</div>
                 <div class="text-sm text-gray-600 mt-1">
@@ -60,10 +70,13 @@
                   <span>{{ product.supplierName }}</span>
                 </div>
               </div>
-              <div v-if="product.latestPrice" class="text-right">
+              
+              <!-- Price -->
+              <div v-if="product.latestPrice" class="text-right flex-shrink-0">
                 <div class="font-bold text-indigo-600">{{ formatPrice(product.latestPrice) }} kr</div>
               </div>
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -295,6 +308,7 @@ const searchResults = ref<any[]>([])
 const showDropdown = ref(false)
 const selectedIndex = ref(-1)
 const selectedProducts = ref<any[]>([])
+const checkedProducts = ref<Set<string>>(new Set()) // Track checked products
 const comparisonResults = ref<any[]>([])
 const isLoading = ref(false)
 const error = ref('')
@@ -338,6 +352,14 @@ const handleSearchInput = async () => {
       )
       showDropdown.value = searchResults.value.length > 0
       selectedIndex.value = -1
+      // Keep existing checked products if they're still in results
+      // (remove checked products that are no longer in results)
+      const resultIds = new Set(searchResults.value.map(p => p.id))
+      checkedProducts.value.forEach(id => {
+        if (!resultIds.has(id)) {
+          checkedProducts.value.delete(id)
+        }
+      })
     } catch (err) {
       console.error('Search error:', err)
       searchResults.value = []
@@ -347,8 +369,8 @@ const handleSearchInput = async () => {
 }
 
 const handleEnterKey = () => {
-  if (selectedProduct.value) {
-    addSelectedProduct()
+  if (checkedProducts.value.size > 0) {
+    addCheckedProducts()
   }
 }
 
@@ -374,32 +396,63 @@ const closeDropdown = () => {
 const handleBlur = () => {
   // Delay to allow click events to fire
   setTimeout(() => {
-    closeDropdown()
+    // Keep dropdown open if there are checked products or if search query is still present
+    // This allows users to continue selecting similar products
+    if (checkedProducts.value.size === 0 && searchQuery.value.length < 3) {
+      closeDropdown()
+    }
   }, 200)
 }
 
-const selectProduct = (product: any) => {
-  if (!selectedProducts.value.some(p => p.id === product.id)) {
-    selectedProducts.value.push(product)
-    searchQuery.value = ''
-    searchResults.value = []
-    showDropdown.value = false
-    selectedIndex.value = -1
+const toggleProductCheck = (productId: string) => {
+  if (checkedProducts.value.has(productId)) {
+    checkedProducts.value.delete(productId)
+  } else {
+    // Only allow checking if product is not already added
+    if (!selectedProducts.value.some(p => p.id === productId)) {
+      checkedProducts.value.add(productId)
+    }
   }
 }
 
-const addSelectedProduct = () => {
-  if (selectedProduct.value) {
-    selectProduct(selectedProduct.value)
+const addCheckedProducts = () => {
+  // Add all checked products to selectedProducts
+  const productsToAdd = searchResults.value.filter(p => checkedProducts.value.has(p.id))
+  
+  productsToAdd.forEach(product => {
+    if (!selectedProducts.value.some(p => p.id === product.id)) {
+      selectedProducts.value.push(product)
+    }
+  })
+  
+  // Clear checked products but keep search query and results
+  // This allows users to continue searching and selecting similar products
+  checkedProducts.value.clear()
+  selectedIndex.value = -1
+  
+  // Update search results to filter out newly added products
+  if (searchQuery.value.length >= 3) {
+    searchResults.value = searchResults.value.filter(p => 
+      !selectedProducts.value.some(sp => sp.id === p.id)
+    )
+    // Keep dropdown open if there are still results
+    showDropdown.value = searchResults.value.length > 0
   }
 }
 
 const removeProduct = (productId: string) => {
   selectedProducts.value = selectedProducts.value.filter(p => p.id !== productId)
+  // Also remove from checked products if it was checked
+  checkedProducts.value.delete(productId)
+  // Re-run search to update results (show the removed product again)
+  if (searchQuery.value.length >= 3) {
+    handleSearchInput()
+  }
 }
 
 const clearAll = () => {
   selectedProducts.value = []
+  checkedProducts.value.clear()
   comparisonResults.value = []
   if (chartInstance) {
     chartInstance.destroy()

@@ -15,8 +15,20 @@
           </div>
         </div>
         
-        <!-- Filters -->
+        <!-- Filters and Actions -->
         <div class="flex items-center gap-4">
+          <!-- Bulk Upload Button -->
+          <NuxtLink
+            to="/invoices/bulk-upload"
+            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+          >
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Fjöldaupphleðsla
+          </NuxtLink>
+          
+          <!-- Filters -->
           <!-- Supplier Filter -->
           <select 
             v-model="filters.supplierId" 

@@ -196,6 +196,220 @@ public class InvoicesController : ControllerBase
 
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, invoice);
     }
+
+    [HttpPost("bulk-upload")]
+    public async Task<IActionResult> BulkUploadInvoices([FromForm] List<IFormFile> files)
+    {
+        if (files == null || files.Count == 0)
+            return BadRequest("No files provided");
+
+        var results = new BulkUploadResult
+        {
+            Total = files.Count,
+            Successful = 0,
+            Skipped = 0,
+            Failed = 0,
+            Errors = new List<string>()
+        };
+
+        foreach (var file in files)
+        {
+            if (file == null || file.Length == 0)
+            {
+                results.Failed++;
+                results.Errors.Add($"{file?.FileName ?? "Unknown"}: File is empty");
+                continue;
+            }
+
+            try
+            {
+                // Parse invoice
+                using var reader = new StreamReader(file.OpenReadStream());
+                var htmlContent = await reader.ReadToEndAsync();
+                var parsedInvoice = _parser.ParseInvoice(htmlContent, file.FileName);
+
+                // Convert parsed invoice to DTO
+                var invoiceDto = new InvoiceConfirmDto
+                {
+                    Id = parsedInvoice.Id,
+                    SupplierName = parsedInvoice.SupplierName,
+                    BuyerName = parsedInvoice.BuyerName,
+                    BuyerTaxId = parsedInvoice.BuyerTaxId,
+                    InvoiceNumber = parsedInvoice.InvoiceNumber,
+                    InvoiceDate = parsedInvoice.InvoiceDate,
+                    TotalAmount = parsedInvoice.TotalAmount,
+                    Items = parsedInvoice.Items.Select(item => new InvoiceItemDto
+                    {
+                        Id = item.Id,
+                        ItemName = item.ItemName,
+                        ItemId = item.ItemId,
+                        Quantity = item.Quantity,
+                        Unit = item.Unit,
+                        UnitPrice = item.UnitPrice,
+                        ListPrice = item.ListPrice,
+                        VatCode = item.VatCode,
+                        Discount = item.Discount,
+                        TotalPrice = item.TotalPrice,
+                        TotalPriceWithVat = item.TotalPriceWithVat
+                    }).ToList()
+                };
+
+                // Try to save invoice (this will skip duplicates)
+                var saveResult = await SaveInvoiceAsync(invoiceDto);
+                
+                if (saveResult.IsSuccess)
+                {
+                    results.Successful++;
+                }
+                else if (saveResult.IsDuplicate)
+                {
+                    results.Skipped++;
+                }
+                else
+                {
+                    results.Failed++;
+                    results.Errors.Add($"{file.FileName}: {saveResult.ErrorMessage}");
+                }
+            }
+            catch (Exception ex)
+            {
+                results.Failed++;
+                results.Errors.Add($"{file.FileName}: {ex.Message}");
+            }
+        }
+
+        return Ok(results);
+    }
+
+    private async Task<SaveInvoiceResult> SaveInvoiceAsync(InvoiceConfirmDto invoiceDto)
+    {
+        try
+        {
+            // 1. Get or create supplier
+            var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoiceDto.SupplierName);
+            
+            // 1.5. Get or create buyer (if TaxId provided)
+            Guid? buyerId = null;
+            if (!string.IsNullOrWhiteSpace(invoiceDto.BuyerTaxId))
+            {
+                try
+                {
+                    var buyer = await _supplierProductService.GetOrCreateBuyerAsync(
+                        invoiceDto.BuyerTaxId,
+                        invoiceDto.BuyerName
+                    );
+                    buyerId = buyer.Id;
+                }
+                catch (Exception ex)
+                {
+                    return new SaveInvoiceResult
+                    {
+                        IsSuccess = false,
+                        IsDuplicate = false,
+                        ErrorMessage = $"Villa við að búa til eða sækja kaupanda: {ex.Message}"
+                    };
+                }
+            }
+            
+            // 2. Check for duplicate invoice (same supplier + invoice number)
+            var existingInvoice = await _context.Invoices
+                .FirstOrDefaultAsync(i => i.SupplierId == supplier.Id && i.InvoiceNumber == invoiceDto.InvoiceNumber);
+            
+            if (existingInvoice != null)
+            {
+                return new SaveInvoiceResult
+                {
+                    IsSuccess = false,
+                    IsDuplicate = true,
+                    ErrorMessage = $"Reikningur með númeri {invoiceDto.InvoiceNumber} frá {invoiceDto.SupplierName} er þegar til í kerfinu."
+                };
+            }
+            
+            // 3. Create invoice entity
+            var invoice = new Invoice
+            {
+                Id = invoiceDto.Id == Guid.Empty ? Guid.NewGuid() : invoiceDto.Id,
+                SupplierId = supplier.Id,
+                BuyerId = buyerId,
+                SupplierName = invoiceDto.SupplierName,
+                BuyerName = invoiceDto.BuyerName,
+                BuyerTaxId = invoiceDto.BuyerTaxId,
+                InvoiceNumber = invoiceDto.InvoiceNumber,
+                InvoiceDate = invoiceDto.InvoiceDate.Kind == DateTimeKind.Unspecified 
+                    ? DateTime.SpecifyKind(invoiceDto.InvoiceDate, DateTimeKind.Utc)
+                    : invoiceDto.InvoiceDate.Kind == DateTimeKind.Local 
+                        ? invoiceDto.InvoiceDate.ToUniversalTime()
+                        : invoiceDto.InvoiceDate,
+                TotalAmount = invoiceDto.TotalAmount,
+                CreatedAt = DateTime.UtcNow
+            };
+            
+            // 4. Process items: get or create products and create InvoiceItem entities
+            foreach (var itemDto in invoiceDto.Items)
+            {
+                var product = await _supplierProductService.GetOrCreateProductAsync(
+                    supplier.Id,
+                    itemDto.ItemId,
+                    itemDto.ItemName,
+                    itemDto.Unit
+                );
+                
+                var invoiceItem = new InvoiceItem
+                {
+                    Id = itemDto.Id == Guid.Empty ? Guid.NewGuid() : itemDto.Id,
+                    InvoiceId = invoice.Id,
+                    ProductId = product.Id,
+                    ItemName = itemDto.ItemName,
+                    ItemId = itemDto.ItemId,
+                    Quantity = itemDto.Quantity,
+                    Unit = itemDto.Unit,
+                    UnitPrice = itemDto.UnitPrice,
+                    ListPrice = itemDto.ListPrice,
+                    VatCode = itemDto.VatCode,
+                    Discount = itemDto.Discount,
+                    TotalPrice = itemDto.TotalPrice,
+                    TotalPriceWithVat = itemDto.TotalPriceWithVat
+                };
+                
+                invoice.Items.Add(invoiceItem);
+            }
+
+            _context.Invoices.Add(invoice);
+            await _context.SaveChangesAsync();
+
+            return new SaveInvoiceResult
+            {
+                IsSuccess = true,
+                IsDuplicate = false,
+                ErrorMessage = null
+            };
+        }
+        catch (Exception ex)
+        {
+            return new SaveInvoiceResult
+            {
+                IsSuccess = false,
+                IsDuplicate = false,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    private class SaveInvoiceResult
+    {
+        public bool IsSuccess { get; set; }
+        public bool IsDuplicate { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+
+    private class BulkUploadResult
+    {
+        public int Total { get; set; }
+        public int Successful { get; set; }
+        public int Skipped { get; set; }
+        public int Failed { get; set; }
+        public List<string> Errors { get; set; } = new();
+    }
     
     [HttpGet]
     public async Task<IActionResult> GetInvoices(
