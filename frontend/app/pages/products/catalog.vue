@@ -15,8 +15,11 @@
               <span v-if="paginatedData">{{ paginatedData.totalCount }}</span>
               <span v-else>0</span>
               vörur í kerfinu
-              <span v-if="paginatedData && paginatedData.totalCount !== paginatedData.items.length">
+              <span v-if="paginatedData && paginatedData.totalCount !== paginatedData.items.length && filters.pageSize !== 10000">
                 (sýni {{ paginatedData.items.length }} af {{ paginatedData.totalCount }})
+              </span>
+              <span v-else-if="paginatedData && filters.pageSize === 10000">
+                (sýni allar)
               </span>
             </p>
           </div>
@@ -144,6 +147,7 @@
             <option :value="25">25</option>
             <option :value="50">50</option>
             <option :value="100">100</option>
+            <option :value="10000">Allt</option>
           </select>
         </div>
       </div>
@@ -280,7 +284,7 @@
       </div>
 
       <!-- Pagination Controls -->
-      <div v-if="paginatedData && paginatedData.totalPages > 1" class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+      <div v-if="paginatedData && paginatedData.totalPages > 1 && filters.pageSize !== 10000" class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
         <div class="text-sm text-gray-700">
           Síða {{ paginatedData.page }} af {{ paginatedData.totalPages }}
         </div>

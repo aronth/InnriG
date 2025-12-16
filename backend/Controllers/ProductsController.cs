@@ -33,7 +33,7 @@ public class ProductsController : ControllerBase
         // Validate pagination parameters
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 1;
-        if (pageSize > 100) pageSize = 100; // Limit max page size
+        if (pageSize > 10000) pageSize = 10000; // Limit max page size (allows listing all products)
 
         // Build base query with latest invoice items
         var baseQuery = _context.Products
