@@ -75,6 +75,10 @@ public class InvoicesController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
+        // Debug: Log received BuyerTaxId
+        Console.WriteLine($"[ConfirmInvoice] Received BuyerTaxId: '{invoiceDto.BuyerTaxId ?? "null"}' (Length: {invoiceDto.BuyerTaxId?.Length ?? 0})");
+        Console.WriteLine($"[ConfirmInvoice] Received BuyerName: '{invoiceDto.BuyerName ?? "null"}'");
+
         // 1. Get or create supplier
         var supplier = await _supplierProductService.GetOrCreateSupplierAsync(invoiceDto.SupplierName);
         
@@ -84,36 +88,35 @@ public class InvoicesController : ControllerBase
         {
             try
             {
-                // Normalize TaxId to match how it's stored in the database
-                var normalizedTaxId = invoiceDto.BuyerTaxId.Replace("-", "").Replace(" ", "");
-                
-                // Get or create buyer - this ensures buyer exists in database
-                await _supplierProductService.GetOrCreateBuyerAsync(
+                // Get or create buyer by TaxId - the service handles normalization internally
+                var buyer = await _supplierProductService.GetOrCreateBuyerAsync(
                     invoiceDto.BuyerTaxId,
                     invoiceDto.BuyerName
                 );
                 
-                // Always query buyer from current context to ensure we have the correct ID
-                // This is more reliable than using the returned entity's ID
-                var buyer = await _context.Buyers
-                    .FirstOrDefaultAsync(b => b.TaxId == normalizedTaxId);
-                
-                if (buyer != null)
-                {
-                    buyerId = buyer.Id;
-                }
-                else
-                {
-                    // Buyer should exist at this point, log warning
-                    Console.WriteLine($"Warning: Buyer with TaxId {normalizedTaxId} was not found after creation");
-                }
+                buyerId = buyer.Id;
+                Console.WriteLine($"[ConfirmInvoice] Successfully got/created buyer. BuyerId: {buyerId}, TaxId: '{buyer.TaxId}'");
             }
             catch (Exception ex)
             {
-                // Log error but continue with invoice creation (buyer will be null)
-                // This allows invoices to be created even if buyer creation fails
-                Console.WriteLine($"Error creating/getting buyer: {ex.Message}");
+                // Log error with full details
+                Console.WriteLine($"[ConfirmInvoice] ERROR creating/getting buyer:");
+                Console.WriteLine($"  TaxId: '{invoiceDto.BuyerTaxId}'");
+                Console.WriteLine($"  Name: '{invoiceDto.BuyerName}'");
+                Console.WriteLine($"  Exception: {ex.Message}");
+                Console.WriteLine($"  Stack: {ex.StackTrace}");
+                
+                // Return error - we need the buyer to be set
+                return BadRequest(new { 
+                    message = $"Villa við að búa til eða sækja kaupanda: {ex.Message}",
+                    buyerTaxId = invoiceDto.BuyerTaxId,
+                    error = ex.Message
+                });
             }
+        }
+        else
+        {
+            Console.WriteLine($"[ConfirmInvoice] WARNING: BuyerTaxId is empty or whitespace. BuyerId will be null.");
         }
         
         // 2. Check for duplicate invoice (same supplier + invoice number)
@@ -149,6 +152,8 @@ public class InvoicesController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         
+        Console.WriteLine($"[ConfirmInvoice] Created invoice entity with BuyerId: {buyerId?.ToString() ?? "null"}");
+        
         // 4. Process items: get or create products and create InvoiceItem entities
         foreach (var itemDto in invoiceDto.Items)
         {
@@ -182,6 +187,12 @@ public class InvoicesController : ControllerBase
 
         _context.Invoices.Add(invoice);
         await _context.SaveChangesAsync();
+        
+        // Verify the buyer was saved
+        var savedInvoice = await _context.Invoices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == invoice.Id);
+        Console.WriteLine($"[ConfirmInvoice] Invoice saved. BuyerId in DB: {savedInvoice?.BuyerId?.ToString() ?? "null"}");
 
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, invoice);
     }
@@ -294,9 +305,16 @@ public class InvoicesController : ControllerBase
     {
         var invoice = await _context.Invoices
             .Include(i => i.Items)
+            .Include(i => i.Buyer)
             .FirstOrDefaultAsync(i => i.Id == id);
             
         if (invoice == null) return NotFound();
+        
+        // If BuyerTaxId is empty but we have a Buyer relationship, populate it from the buyer
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId) && invoice.Buyer != null)
+        {
+            invoice.BuyerTaxId = invoice.Buyer.TaxId;
+        }
         
         return Ok(invoice);
     }

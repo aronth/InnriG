@@ -99,6 +99,37 @@ export const useProducts = () => {
         })
     }
 
+    const exportToCsv = async (filters?: ProductFilters) => {
+        const params = new URLSearchParams()
+        
+        if (filters?.supplierId) params.append('supplierId', filters.supplierId)
+        if (filters?.search) params.append('search', filters.search)
+        if (filters?.minPrice !== undefined) params.append('minPrice', filters.minPrice.toString())
+        if (filters?.maxPrice !== undefined) params.append('maxPrice', filters.maxPrice.toString())
+        if (filters?.hasPrice !== undefined) params.append('hasPrice', filters.hasPrice.toString())
+
+        const response = await fetch(
+            `${apiBase}/api/products/export?${params.toString()}`,
+            {
+                credentials: 'include'
+            }
+        )
+        
+        if (!response.ok) {
+            throw new Error('Failed to export CSV')
+        }
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `vorulisti_${new Date().toISOString().slice(0, 10)}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+    }
+
     return {
         getAllProducts,
         lookupProducts,
@@ -106,6 +137,7 @@ export const useProducts = () => {
         getProductHistory,
         compareProductPrices,
         compareMultipleProducts,
-        deleteProduct
+        deleteProduct,
+        exportToCsv
     }
 }

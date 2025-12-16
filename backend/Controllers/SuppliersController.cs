@@ -96,4 +96,46 @@ public class SuppliersController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpGet("update-status")]
+    public async Task<IActionResult> GetSupplierUpdateStatus()
+    {
+        var threeMonthsAgo = DateTime.UtcNow.AddMonths(-3);
+        
+        var suppliers = await _context.Suppliers
+            .Select(s => new
+            {
+                SupplierId = s.Id,
+                SupplierName = s.Name,
+                LastInvoiceDate = s.Invoices
+                    .OrderByDescending(i => i.InvoiceDate)
+                    .Select(i => (DateTime?)i.InvoiceDate)
+                    .FirstOrDefault(),
+                LastInvoiceNumber = s.Invoices
+                    .OrderByDescending(i => i.InvoiceDate)
+                    .Select(i => i.InvoiceNumber)
+                    .FirstOrDefault(),
+                InvoiceCount = s.Invoices.Count
+            })
+            .OrderBy(s => s.SupplierName)
+            .ToListAsync();
+        
+        var result = suppliers.Select(s => new
+        {
+            supplierId = s.SupplierId,
+            supplierName = s.SupplierName,
+            lastInvoiceDate = s.LastInvoiceDate,
+            lastInvoiceNumber = s.LastInvoiceNumber,
+            invoiceCount = s.InvoiceCount,
+            daysSinceLastInvoice = s.LastInvoiceDate.HasValue
+                ? (int?)(DateTime.UtcNow - s.LastInvoiceDate.Value).TotalDays
+                : null,
+            isOverdue = s.LastInvoiceDate.HasValue && s.LastInvoiceDate.Value < threeMonthsAgo,
+            status = s.LastInvoiceDate.HasValue
+                ? (s.LastInvoiceDate.Value < threeMonthsAgo ? "Overdue" : "OK")
+                : "NoInvoices"
+        }).ToList();
+        
+        return Ok(result);
+    }
 }

@@ -127,63 +127,67 @@ public class TableInvoiceSubParser : IInvoiceSubParser
                     decimal listPrice = unitPrice; // Default to unit price if no detailed info
                     decimal discount = 0;
                     decimal discountPercent = 0;
+                    bool discountProvided = false; // Track if discount was provided from discounts table
 
-                    if (detailedByItemId.TryGetValue(itemId, out var detailById))
+                    // First, check if discount is provided from discounts table
+                    if (extraInfo.ContainsKey(currentLineNum))
                     {
-                        if (detailById.SalesPrice.HasValue && detailById.SalesPrice.Value > 0)
-                        {
-                            listPrice = detailById.SalesPrice.Value;
-                        }
+                        listPrice = extraInfo[currentLineNum].ListPrice;
+                        discountPercent = extraInfo[currentLineNum].Discount; // Discount from table is already a percentage
+                        discountProvided = true;
+                    }
 
-                        if (detailById.LineAmount.HasValue && detailById.LineAmount.Value > 0)
+                    // Only calculate discount if it wasn't provided
+                    if (!discountProvided)
+                    {
+                        if (detailedByItemId.TryGetValue(itemId, out var detailById))
                         {
-                            var qtyForCalc = qty != 0 ? qty : 1;
-                            var discountedUnitPrice = detailById.LineAmount.Value / qtyForCalc;
-                            unitPrice = discountedUnitPrice;
-                            total = detailById.LineAmount.Value;
-
-                            if (discount == 0 && listPrice > 0 && discountedUnitPrice > 0)
+                            if (detailById.SalesPrice.HasValue && detailById.SalesPrice.Value > 0)
                             {
-                                var calculatedDiscount = listPrice - discountedUnitPrice;
-                                if (calculatedDiscount > 0)
+                                listPrice = detailById.SalesPrice.Value;
+                            }
+
+                            if (detailById.LineAmount.HasValue && detailById.LineAmount.Value > 0)
+                            {
+                                var qtyForCalc = qty != 0 ? qty : 1;
+                                var discountedUnitPrice = detailById.LineAmount.Value / qtyForCalc;
+                                unitPrice = discountedUnitPrice;
+                                total = detailById.LineAmount.Value;
+
+                                if (listPrice > 0 && discountedUnitPrice > 0 && discountedUnitPrice < listPrice)
                                 {
-                                    discount = calculatedDiscount;
-                                    discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                    var calculatedDiscount = listPrice - discountedUnitPrice;
+                                    if (calculatedDiscount > 0)
+                                    {
+                                        discount = calculatedDiscount;
+                                        discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                    }
                                 }
                             }
                         }
-                    }
-                    else if (extraInfo.ContainsKey(currentLineNum))
-                    {
-                        listPrice = extraInfo[currentLineNum].ListPrice;
-                        discount = extraInfo[currentLineNum].Discount;
-                        if (listPrice > 0 && discount > 0)
-                        {
-                            discountPercent = Math.Round((discount / listPrice) * 100, 2);
-                        }
-                    }
 
-                    if (detailedLineInfo.TryGetValue(currentLineNum, out var detailed))
-                    {
-                        if (detailed.SalesPrice.HasValue && detailed.SalesPrice.Value > 0)
+                        if (!discountProvided && detailedLineInfo.TryGetValue(currentLineNum, out var detailed))
                         {
-                            listPrice = detailed.SalesPrice.Value;
-                        }
-
-                        if (detailed.LineAmount.HasValue && detailed.LineAmount.Value > 0)
-                        {
-                            var qtyForCalc = qty != 0 ? qty : 1;
-                            var discountedUnitPrice = detailed.LineAmount.Value / qtyForCalc;
-                            unitPrice = discountedUnitPrice;
-                            total = detailed.LineAmount.Value;
-
-                            if (discount == 0 && listPrice > 0 && discountedUnitPrice > 0)
+                            if (detailed.SalesPrice.HasValue && detailed.SalesPrice.Value > 0)
                             {
-                                var calculatedDiscount = listPrice - discountedUnitPrice;
-                                if (calculatedDiscount > 0)
+                                listPrice = detailed.SalesPrice.Value;
+                            }
+
+                            if (detailed.LineAmount.HasValue && detailed.LineAmount.Value > 0)
+                            {
+                                var qtyForCalc = qty != 0 ? qty : 1;
+                                var discountedUnitPrice = detailed.LineAmount.Value / qtyForCalc;
+                                unitPrice = discountedUnitPrice;
+                                total = detailed.LineAmount.Value;
+
+                                if (listPrice > 0 && discountedUnitPrice > 0 && discountedUnitPrice < listPrice)
                                 {
-                                    discount = calculatedDiscount;
-                                    discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                    var calculatedDiscount = listPrice - discountedUnitPrice;
+                                    if (calculatedDiscount > 0)
+                                    {
+                                        discount = calculatedDiscount;
+                                        discountPercent = Math.Round((discount / listPrice) * 100, 2);
+                                    }
                                 }
                             }
                         }

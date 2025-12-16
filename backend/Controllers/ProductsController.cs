@@ -341,6 +341,554 @@ public class ProductsController : ControllerBase
         return Ok(comparisonResults);
     }
 
+    // Get unified inventory list
+    [HttpGet("unified-inventory-list")]
+    public async Task<IActionResult> GetUnifiedInventoryList(
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] string? search = null)
+    {
+        var query = _context.Products
+            .Include(p => p.Supplier)
+            .GroupJoin(
+                _context.InvoiceItems
+                    .Include(ii => ii.Invoice)
+                    .OrderByDescending(ii => ii.Invoice.InvoiceDate),
+                p => p.Id,
+                ii => ii.ProductId,
+                (product, items) => new
+                {
+                    Product = product,
+                    LatestItem = items.FirstOrDefault()
+                })
+            .Where(x => x.LatestItem != null); // Only products with purchase history
+
+        // Apply filters
+        if (supplierId.HasValue)
+        {
+            query = query.Where(x => x.Product.SupplierId == supplierId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(x =>
+                x.Product.Name.ToLower().Contains(searchLower) ||
+                x.Product.ProductCode.ToLower().Contains(searchLower) ||
+                x.Product.Supplier.Name.ToLower().Contains(searchLower));
+        }
+
+        var results = await query
+            .Select(x => new UnifiedInventoryListDto
+            {
+                Birgir = x.Product.Supplier.Name,
+                Vorunumer = x.Product.ProductCode,
+                Voruheiti = x.Product.Name,
+                Eining = x.LatestItem.Unit ?? x.Product.CurrentUnit ?? "",
+                VerdAnVsk = x.LatestItem.UnitPrice,
+                SkilagjoldUmbudagjold = 0, // Not available in invoice data
+                NettoInnkaupsverdPerEiningu = x.LatestItem.UnitPrice, // Same as VerdAnVsk when fees = 0
+                DagsetningSidustuUppfaerslu = x.LatestItem.Invoice.InvoiceDate,
+                SidastiReikningsnumer = x.LatestItem.Invoice.InvoiceNumber
+            })
+            .OrderBy(x => x.Birgir)
+            .ThenBy(x => x.Voruheiti)
+            .ToListAsync();
+
+        return Ok(results);
+    }
+
+    // Export unified inventory list to CSV
+    [HttpGet("unified-inventory-list/export")]
+    public async Task<IActionResult> ExportUnifiedInventoryList(
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] string? search = null)
+    {
+        var query = _context.Products
+            .Include(p => p.Supplier)
+            .GroupJoin(
+                _context.InvoiceItems
+                    .Include(ii => ii.Invoice)
+                    .OrderByDescending(ii => ii.Invoice.InvoiceDate),
+                p => p.Id,
+                ii => ii.ProductId,
+                (product, items) => new
+                {
+                    Product = product,
+                    LatestItem = items.FirstOrDefault()
+                })
+            .Where(x => x.LatestItem != null);
+
+        // Apply filters
+        if (supplierId.HasValue)
+        {
+            query = query.Where(x => x.Product.SupplierId == supplierId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(x =>
+                x.Product.Name.ToLower().Contains(searchLower) ||
+                x.Product.ProductCode.ToLower().Contains(searchLower) ||
+                x.Product.Supplier.Name.ToLower().Contains(searchLower));
+        }
+
+        var results = await query
+            .Select(x => new UnifiedInventoryListDto
+            {
+                Birgir = x.Product.Supplier.Name,
+                Vorunumer = x.Product.ProductCode,
+                Voruheiti = x.Product.Name,
+                Eining = x.LatestItem.Unit ?? x.Product.CurrentUnit ?? "",
+                VerdAnVsk = x.LatestItem.UnitPrice,
+                SkilagjoldUmbudagjold = 0,
+                NettoInnkaupsverdPerEiningu = x.LatestItem.UnitPrice,
+                DagsetningSidustuUppfaerslu = x.LatestItem.Invoice.InvoiceDate,
+                SidastiReikningsnumer = x.LatestItem.Invoice.InvoiceNumber
+            })
+            .OrderBy(x => x.Birgir)
+            .ThenBy(x => x.Voruheiti)
+            .ToListAsync();
+
+        // Generate CSV
+        var csv = GenerateCsv(results);
+        var fileName = $"vorulisti_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+        
+        return File(
+            System.Text.Encoding.UTF8.GetBytes(csv),
+            "text/csv; charset=utf-8",
+            fileName);
+    }
+
+    private string GenerateCsv(List<UnifiedInventoryListDto> data)
+    {
+        var csv = new System.Text.StringBuilder();
+        
+        // Header row (Icelandic column names)
+        csv.AppendLine("Birgir,Vörunúmer,Vöruheiti,Eining,Verð án VSK,Skilagjöld / umbúðagjöld,Nettó innkaupsverð per einingu,Dagsetning síðustu uppfærslu,Síðasti reikningsnúmer");
+        
+        // Data rows
+        foreach (var item in data)
+        {
+            csv.AppendLine($"{EscapeCsv(item.Birgir)}," +
+                          $"{EscapeCsv(item.Vorunumer)}," +
+                          $"{EscapeCsv(item.Voruheiti)}," +
+                          $"{EscapeCsv(item.Eining)}," +
+                          $"{item.VerdAnVsk.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.SkilagjoldUmbudagjold.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.NettoInnkaupsverdPerEiningu.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.DagsetningSidustuUppfaerslu:yyyy-MM-dd}," +
+                          $"{EscapeCsv(item.SidastiReikningsnumer ?? "")}");
+        }
+        
+        return csv.ToString();
+    }
+
+    private string EscapeCsv(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+        
+        // If value contains comma, quote, or newline, wrap in quotes and escape quotes
+        if (value.Contains(",") || value.Contains("\"") || value.Contains("\n"))
+        {
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+        
+        return value;
+    }
+
+    // Get price comparison between two dates
+    [HttpGet("price-comparison")]
+    public async Task<IActionResult> GetPriceComparison(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null)
+    {
+        // Convert dates to UTC (query parameters come as Unspecified)
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+        
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+        
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        // Get all products (optionally filtered by supplier)
+        var productsQuery = _context.Products
+            .Include(p => p.Supplier)
+            .AsQueryable();
+
+        if (supplierId.HasValue)
+        {
+            productsQuery = productsQuery.Where(p => p.SupplierId == supplierId.Value);
+        }
+
+        var products = await productsQuery.ToListAsync();
+
+        var comparisonResults = new List<PriceComparisonDto>();
+
+        foreach (var product in products)
+        {
+            // Find closest invoice item to fromDate (before or on that date)
+            var fromItem = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= fromDateUtc)
+                .Include(ii => ii.Invoice)
+                .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+                .FirstOrDefaultAsync();
+
+            // Find closest invoice item to toDate (before or on that date)
+            var toItem = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= toDateUtc)
+                .Include(ii => ii.Invoice)
+                .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+                .FirstOrDefaultAsync();
+
+            // Only include products that have prices at both dates
+            if (fromItem != null && toItem != null)
+            {
+                var unitPriceChange = toItem.UnitPrice - fromItem.UnitPrice;
+                var unitPriceChangePercent = fromItem.UnitPrice != 0
+                    ? (unitPriceChange / fromItem.UnitPrice) * 100
+                    : 0;
+
+                var listPriceChange = toItem.ListPrice - fromItem.ListPrice;
+                var listPriceChangePercent = fromItem.ListPrice != 0
+                    ? (listPriceChange / fromItem.ListPrice) * 100
+                    : 0;
+
+                var discountChange = toItem.Discount - fromItem.Discount;
+                var discountChangePercent = fromItem.Discount != 0
+                    ? (discountChange / fromItem.Discount) * 100
+                    : (toItem.Discount != 0 ? 100 : 0); // New discount if fromItem had none
+
+                comparisonResults.Add(new PriceComparisonDto
+                {
+                    ProductId = product.Id,
+                    ProductCode = product.ProductCode,
+                    ProductName = product.Name,
+                    SupplierId = product.SupplierId,
+                    SupplierName = product.Supplier.Name,
+                    Unit = toItem.Unit ?? product.CurrentUnit ?? "",
+                    
+                    // From Date Prices
+                    FromDate = fromItem.Invoice.InvoiceDate,
+                    FromUnitPrice = fromItem.UnitPrice,
+                    FromListPrice = fromItem.ListPrice,
+                    FromDiscount = fromItem.Discount,
+                    FromInvoiceNumber = fromItem.Invoice.InvoiceNumber,
+                    
+                    // To Date Prices
+                    ToDate = toItem.Invoice.InvoiceDate,
+                    ToUnitPrice = toItem.UnitPrice,
+                    ToListPrice = toItem.ListPrice,
+                    ToDiscount = toItem.Discount,
+                    ToInvoiceNumber = toItem.Invoice.InvoiceNumber,
+                    
+                    // Changes
+                    UnitPriceChange = unitPriceChange,
+                    UnitPriceChangePercent = unitPriceChangePercent,
+                    ListPriceChange = listPriceChange,
+                    ListPriceChangePercent = listPriceChangePercent,
+                    DiscountChange = discountChange,
+                    DiscountChangePercent = discountChangePercent
+                });
+            }
+        }
+
+        // Calculate summary statistics
+        var summary = new PriceComparisonSummaryDto
+        {
+            TotalProducts = comparisonResults.Count,
+            ProductsWithPriceIncrease = comparisonResults.Count(r => r.UnitPriceChange > 0),
+            ProductsWithPriceDecrease = comparisonResults.Count(r => r.UnitPriceChange < 0),
+            ProductsWithNoChange = comparisonResults.Count(r => r.UnitPriceChange == 0),
+            AveragePriceChangePercent = comparisonResults.Any()
+                ? comparisonResults.Average(r => r.UnitPriceChangePercent)
+                : 0,
+            AveragePriceIncrease = comparisonResults.Where(r => r.UnitPriceChange > 0).Any()
+                ? comparisonResults.Where(r => r.UnitPriceChange > 0).Average(r => r.UnitPriceChangePercent)
+                : 0,
+            AveragePriceDecrease = comparisonResults.Where(r => r.UnitPriceChange < 0).Any()
+                ? comparisonResults.Where(r => r.UnitPriceChange < 0).Average(r => r.UnitPriceChangePercent)
+                : 0
+        };
+
+        return Ok(new
+        {
+            FromDate = fromDateUtc,
+            ToDate = toDateUtc,
+            Summary = summary,
+            Products = comparisonResults.OrderByDescending(r => Math.Abs(r.UnitPriceChangePercent))
+        });
+    }
+
+    // Export price comparison to CSV
+    [HttpGet("price-comparison/export")]
+    public async Task<IActionResult> ExportPriceComparison(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null)
+    {
+        // Convert dates to UTC (query parameters come as Unspecified)
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+        
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+        
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        // Get all products (optionally filtered by supplier)
+        var productsQuery = _context.Products
+            .Include(p => p.Supplier)
+            .AsQueryable();
+
+        if (supplierId.HasValue)
+        {
+            productsQuery = productsQuery.Where(p => p.SupplierId == supplierId.Value);
+        }
+
+        var products = await productsQuery.ToListAsync();
+
+        var comparisonResults = new List<PriceComparisonDto>();
+
+        foreach (var product in products)
+        {
+            // Find closest invoice item to fromDate (before or on that date)
+            var fromItem = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= fromDateUtc)
+                .Include(ii => ii.Invoice)
+                .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+                .FirstOrDefaultAsync();
+
+            // Find closest invoice item to toDate (before or on that date)
+            var toItem = await _context.InvoiceItems
+                .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= toDateUtc)
+                .Include(ii => ii.Invoice)
+                .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+                .FirstOrDefaultAsync();
+
+            // Only include products that have prices at both dates
+            if (fromItem != null && toItem != null)
+            {
+                var unitPriceChange = toItem.UnitPrice - fromItem.UnitPrice;
+                var unitPriceChangePercent = fromItem.UnitPrice != 0
+                    ? (unitPriceChange / fromItem.UnitPrice) * 100
+                    : 0;
+
+                var listPriceChange = toItem.ListPrice - fromItem.ListPrice;
+                var listPriceChangePercent = fromItem.ListPrice != 0
+                    ? (listPriceChange / fromItem.ListPrice) * 100
+                    : 0;
+
+                var discountChange = toItem.Discount - fromItem.Discount;
+                var discountChangePercent = fromItem.Discount != 0
+                    ? (discountChange / fromItem.Discount) * 100
+                    : (toItem.Discount != 0 ? 100 : 0);
+
+                comparisonResults.Add(new PriceComparisonDto
+                {
+                    ProductId = product.Id,
+                    ProductCode = product.ProductCode,
+                    ProductName = product.Name,
+                    SupplierId = product.SupplierId,
+                    SupplierName = product.Supplier.Name,
+                    Unit = toItem.Unit ?? product.CurrentUnit ?? "",
+                    
+                    // From Date Prices
+                    FromDate = fromItem.Invoice.InvoiceDate,
+                    FromUnitPrice = fromItem.UnitPrice,
+                    FromListPrice = fromItem.ListPrice,
+                    FromDiscount = fromItem.Discount,
+                    FromInvoiceNumber = fromItem.Invoice.InvoiceNumber,
+                    
+                    // To Date Prices
+                    ToDate = toItem.Invoice.InvoiceDate,
+                    ToUnitPrice = toItem.UnitPrice,
+                    ToListPrice = toItem.ListPrice,
+                    ToDiscount = toItem.Discount,
+                    ToInvoiceNumber = toItem.Invoice.InvoiceNumber,
+                    
+                    // Changes
+                    UnitPriceChange = unitPriceChange,
+                    UnitPriceChangePercent = unitPriceChangePercent,
+                    ListPriceChange = listPriceChange,
+                    ListPriceChangePercent = listPriceChangePercent,
+                    DiscountChange = discountChange,
+                    DiscountChangePercent = discountChangePercent
+                });
+            }
+        }
+
+        // Generate CSV
+        var csv = GeneratePriceComparisonCsv(comparisonResults, fromDateUtc, toDateUtc);
+        var fileName = $"verdbreytingaskyrsla_{fromDateUtc:yyyyMMdd}_{toDateUtc:yyyyMMdd}.csv";
+        
+        return File(
+            System.Text.Encoding.UTF8.GetBytes(csv),
+            "text/csv; charset=utf-8",
+            fileName);
+    }
+
+    private string GeneratePriceComparisonCsv(List<PriceComparisonDto> data, DateTime fromDate, DateTime toDate)
+    {
+        var csv = new System.Text.StringBuilder();
+        
+        // Header row (Icelandic column names)
+        csv.AppendLine("Birgir,Vörunúmer,Vöruheiti,Eining,Frá dagsetningu,Frá verði,Frá listaverði,Frá afslætti,Til dagsetningar,Til verðs,Til listaverðs,Til afsláttar,Verðbreyting,Verðbreyting %,Listaverðsbreyting,Listaverðsbreyting %,Afsláttarbreyting,Afsláttarbreyting %");
+        
+        // Data rows
+        foreach (var item in data.OrderByDescending(r => Math.Abs(r.UnitPriceChangePercent)))
+        {
+            csv.AppendLine($"{EscapeCsv(item.SupplierName)}," +
+                          $"{EscapeCsv(item.ProductCode)}," +
+                          $"{EscapeCsv(item.ProductName)}," +
+                          $"{EscapeCsv(item.Unit)}," +
+                          $"{item.FromDate:yyyy-MM-dd}," +
+                          $"{item.FromUnitPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.FromListPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.FromDiscount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.ToDate:yyyy-MM-dd}," +
+                          $"{item.ToUnitPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.ToListPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.ToDiscount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.UnitPriceChange.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.UnitPriceChangePercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.ListPriceChange.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.ListPriceChangePercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.DiscountChange.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.DiscountChangePercent.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+        
+        return csv.ToString();
+    }
+
+    // Export product list to CSV
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportProducts(
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] string? search = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null,
+        [FromQuery] bool? hasPrice = null)
+    {
+        // Build base query with latest invoice items (same logic as GetProducts)
+        var baseQuery = _context.Products
+            .GroupJoin(
+                _context.InvoiceItems.Include(ii => ii.Invoice),
+                p => p.Id,
+                ii => ii.ProductId,
+                (product, items) => new
+                {
+                    Product = product,
+                    LatestItem = items.OrderByDescending(ii => ii.Invoice.InvoiceDate).FirstOrDefault()
+                })
+            .Select(p => new
+            {
+                p.Product.Id,
+                p.Product.ProductCode,
+                p.Product.Name,
+                p.Product.Description,
+                p.Product.CurrentUnit,
+                p.Product.SupplierId,
+                SupplierName = p.Product.Supplier.Name,
+                LatestPrice = p.LatestItem != null ? p.LatestItem.UnitPrice : (decimal?)null,
+                ListPrice = p.LatestItem != null ? p.LatestItem.ListPrice : (decimal?)null,
+                Discount = p.LatestItem != null ? p.LatestItem.Discount : (decimal?)null,
+                LastPurchaseDate = p.LatestItem != null ? p.LatestItem.Invoice.InvoiceDate : (DateTime?)null
+            });
+
+        // Apply filters (same as GetProducts)
+        if (supplierId.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.SupplierId == supplierId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            baseQuery = baseQuery.Where(p => 
+                p.Name.ToLower().Contains(searchLower) ||
+                p.ProductCode.ToLower().Contains(searchLower) ||
+                (p.Description != null && p.Description.ToLower().Contains(searchLower)));
+        }
+
+        if (minPrice.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue && p.LatestPrice >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue && p.LatestPrice <= maxPrice.Value);
+        }
+
+        if (hasPrice.HasValue)
+        {
+            if (hasPrice.Value)
+            {
+                baseQuery = baseQuery.Where(p => p.LatestPrice.HasValue);
+            }
+            else
+            {
+                baseQuery = baseQuery.Where(p => !p.LatestPrice.HasValue);
+            }
+        }
+
+        var items = await baseQuery
+            .OrderBy(p => p.SupplierName)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+
+        // Generate CSV
+        var csv = GenerateProductListCsv(items);
+        var fileName = $"vorulisti_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+        
+        return File(
+            System.Text.Encoding.UTF8.GetBytes(csv),
+            "text/csv; charset=utf-8",
+            fileName);
+    }
+
+    private string GenerateProductListCsv(IEnumerable<object> data)
+    {
+        var csv = new System.Text.StringBuilder();
+        
+        // Header row (Icelandic column names)
+        csv.AppendLine("Birgir,Vörunúmer,Vöruheiti,Lýsing,Eining,Verð,Listaverð,Afsláttur,Síðasta innkaupadagsetning");
+        
+        // Data rows
+        foreach (dynamic item in data)
+        {
+            csv.AppendLine($"{EscapeCsv(item.SupplierName)}," +
+                          $"{EscapeCsv(item.ProductCode)}," +
+                          $"{EscapeCsv(item.Name)}," +
+                          $"{EscapeCsv(item.Description ?? "")}," +
+                          $"{EscapeCsv(item.CurrentUnit ?? "")}," +
+                          $"{(item.LatestPrice.HasValue ? item.LatestPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(item.ListPrice.HasValue ? item.ListPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(item.Discount.HasValue ? item.Discount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(item.LastPurchaseDate.HasValue ? item.LastPurchaseDate.Value.ToString("yyyy-MM-dd") : "")}");
+        }
+        
+        return csv.ToString();
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] Product product)
     {

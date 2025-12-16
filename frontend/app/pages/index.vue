@@ -8,9 +8,18 @@
       </p>
     </div>
 
+    <!-- KPI Dashboard -->
+    <KPIDashboard />
+
+    <!-- Supplier Update Status Panel -->
+    <SupplierUpdateStatusPanel />
+
     <!-- Dashboard Grid -->
-    <div class="grid grid-cols-3 gap-4">
-      
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Price Comparison Report -->
+      <div class="lg:col-span-2">
+        <PriceComparisonReport />
+      </div>
     </div>
   </div>
 </template>

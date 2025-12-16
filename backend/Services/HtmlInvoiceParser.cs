@@ -309,12 +309,66 @@ public class HtmlInvoiceParser : IInvoiceParser
         }
         
         // Extract TaxId (Icelandic kennitala: 10 digits, may have dash)
-        if (!string.IsNullOrEmpty(buyerSectionText))
+        // Use a more flexible regex that handles various formats
+        var taxIdPattern = new Regex(@"(\d{6}[-.\s]?\d{4})", RegexOptions.Compiled);
+        
+        // First, try to find tax ID in "Ítarupplýsingar kaupanda" (Buyer details) section
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId))
         {
-            var taxIdMatch = Regex.Match(buyerSectionText, @"\b(\d{6}[-]?\d{4})\b");
+            var kaupandaDetails = doc.DocumentNode.SelectSingleNode("//*[contains(text(), 'Ítarupplýsingar kaupanda') or contains(text(), 'Itarupplysingar kaupanda')]");
+            if (kaupandaDetails != null)
+            {
+                var parent = kaupandaDetails.ParentNode;
+                if (parent != null)
+                {
+                    var detailsText = parent.InnerText;
+                    var taxIdMatch = taxIdPattern.Match(detailsText);
+                    if (taxIdMatch.Success)
+                    {
+                        var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                        if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                        {
+                            invoice.BuyerTaxId = taxId;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Try to find tax ID in ListItem divs (common pattern)
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId))
+        {
+            var listItems = doc.DocumentNode.SelectNodes("//div[contains(@class, 'ListItem')]");
+            if (listItems != null)
+            {
+                foreach (var item in listItems)
+                {
+                    var itemText = item.InnerText.Trim();
+                    var taxIdMatch = taxIdPattern.Match(itemText);
+                    if (taxIdMatch.Success)
+                    {
+                        var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                        if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                        {
+                            invoice.BuyerTaxId = taxId;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // First try in buyer section text if available
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId) && !string.IsNullOrEmpty(buyerSectionText))
+        {
+            var taxIdMatch = taxIdPattern.Match(buyerSectionText);
             if (taxIdMatch.Success)
             {
-                invoice.BuyerTaxId = taxIdMatch.Groups[1].Value.Replace("-", ""); // Remove dash if present
+                var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                {
+                    invoice.BuyerTaxId = taxId;
+                }
             }
         }
         
@@ -324,10 +378,117 @@ public class HtmlInvoiceParser : IInvoiceParser
             var ublIdNode = doc.DocumentNode.SelectSingleNode("//*[contains(@class, 'UBLID')]");
             if (ublIdNode != null)
             {
-                var taxIdMatch = Regex.Match(ublIdNode.InnerText, @"\b(\d{6}[-]?\d{4})\b");
+                var taxIdMatch = taxIdPattern.Match(ublIdNode.InnerText);
                 if (taxIdMatch.Success)
                 {
-                    invoice.BuyerTaxId = taxIdMatch.Groups[1].Value.Replace("-", "");
+                    var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                    if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                    {
+                        invoice.BuyerTaxId = taxId;
+                    }
+                }
+            }
+        }
+        
+        // If still not found, search in buyer_info section more broadly
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId) && buyerInfoNode != null)
+        {
+            var buyerInfoText = buyerInfoNode.InnerText;
+            var taxIdMatch = taxIdPattern.Match(buyerInfoText);
+            if (taxIdMatch.Success)
+            {
+                var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                {
+                    invoice.BuyerTaxId = taxId;
+                }
+            }
+        }
+        
+        // Search in all nodes that contain "Kaupandi" or buyer-related text
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId))
+        {
+            var kaupandiNodes = doc.DocumentNode.SelectNodes("//*[text()[contains(., 'Kaupandi') or contains(., 'kaupandi')]]");
+            if (kaupandiNodes != null)
+            {
+                foreach (var node in kaupandiNodes)
+                {
+                    // Check parent and siblings for tax ID
+                    var parent = node.ParentNode;
+                    if (parent != null)
+                    {
+                        var parentText = parent.InnerText;
+                        var taxIdMatch = taxIdPattern.Match(parentText);
+                        if (taxIdMatch.Success)
+                        {
+                            var taxId = taxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                            if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                            {
+                                invoice.BuyerTaxId = taxId;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Also check the node itself and its children
+                    var nodeText = node.InnerText;
+                    var nodeTaxIdMatch = taxIdPattern.Match(nodeText);
+                    if (nodeTaxIdMatch.Success)
+                    {
+                        var taxId = nodeTaxIdMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                        if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                        {
+                            invoice.BuyerTaxId = taxId;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Last resort: search entire document text for any 10-digit tax ID pattern
+        // But prioritize tax IDs that appear near buyer name or in buyer-related sections
+        if (string.IsNullOrEmpty(invoice.BuyerTaxId))
+        {
+            var documentText = doc.DocumentNode.InnerText;
+            var allMatches = taxIdPattern.Matches(documentText);
+            
+            // If we found the buyer name, look for tax ID near it
+            if (!string.IsNullOrEmpty(invoice.BuyerName))
+            {
+                var buyerNameIndex = documentText.IndexOf(invoice.BuyerName, StringComparison.OrdinalIgnoreCase);
+                if (buyerNameIndex >= 0)
+                {
+                    // Search within 500 characters of the buyer name
+                    var searchStart = Math.Max(0, buyerNameIndex - 250);
+                    var searchEnd = Math.Min(documentText.Length, buyerNameIndex + invoice.BuyerName.Length + 250);
+                    var nearbyText = documentText.Substring(searchStart, searchEnd - searchStart);
+                    
+                    var nearbyMatch = taxIdPattern.Match(nearbyText);
+                    if (nearbyMatch.Success)
+                    {
+                        var taxId = nearbyMatch.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                        if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                        {
+                            invoice.BuyerTaxId = taxId;
+                        }
+                    }
+                }
+            }
+            
+            // If still not found, take the first valid tax ID found in the document
+            // (but skip if it looks like it might be a date or other number)
+            if (string.IsNullOrEmpty(invoice.BuyerTaxId) && allMatches.Count > 0)
+            {
+                foreach (Match match in allMatches)
+                {
+                    var taxId = match.Groups[1].Value.Replace("-", "").Replace(".", "").Replace(" ", "");
+                    // Basic validation: should be exactly 10 digits
+                    if (taxId.Length == 10 && taxId.All(char.IsDigit))
+                    {
+                        invoice.BuyerTaxId = taxId;
+                        break;
+                    }
                 }
             }
         }
