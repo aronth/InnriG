@@ -14,6 +14,8 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Buyer> Buyers { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<InvoiceItem> InvoiceItems { get; set; }
+    public DbSet<WaitTimeNotification> WaitTimeNotifications { get; set; }
+    public DbSet<WaitTimeRecord> WaitTimeRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,5 +99,16 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         modelBuilder.Entity<InvoiceItem>()
             .Property(i => i.Quantity)
             .HasPrecision(18, 3);
+        
+        // WaitTimeNotification Configuration
+        modelBuilder.Entity<WaitTimeNotification>()
+            .HasOne(wtn => wtn.User)
+            .WithMany(u => u.WaitTimeNotifications)
+            .HasForeignKey(wtn => wtn.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        
+        modelBuilder.Entity<WaitTimeNotification>()
+            .HasIndex(wtn => new { wtn.UserId, wtn.Restaurant })
+            .IsUnique();
     }
 }

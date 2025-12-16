@@ -3,6 +3,7 @@ using System;
 using InnriGreifi.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace InnriGreifi.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251216105303_AddWaitTimeMonitoring")]
+    partial class AddWaitTimeMonitoring
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -325,78 +328,6 @@ namespace InnriGreifi.API.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeNotification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastNotifiedSent")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LastNotifiedSott")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PushoverUserKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("Restaurant")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SentThresholdMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SottThresholdMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Restaurant")
-                        .IsUnique();
-
-                    b.ToTable("WaitTimeNotifications");
-                });
-
-            modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsClosed")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("Restaurant")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ScrapedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("SentMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SottMinutes")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("WaitTimeRecords");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
                     b.Property<Guid>("Id")
@@ -575,17 +506,6 @@ namespace InnriGreifi.API.Migrations
                     b.Navigation("Supplier");
                 });
 
-            modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeNotification", b =>
-                {
-                    b.HasOne("InnriGreifi.API.Models.User", "User")
-                        .WithMany("WaitTimeNotifications")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -657,11 +577,6 @@ namespace InnriGreifi.API.Migrations
                     b.Navigation("Invoices");
 
                     b.Navigation("Products");
-                });
-
-            modelBuilder.Entity("InnriGreifi.API.Models.User", b =>
-                {
-                    b.Navigation("WaitTimeNotifications");
                 });
 #pragma warning restore 612, 618
         }

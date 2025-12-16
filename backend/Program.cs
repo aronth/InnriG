@@ -74,6 +74,15 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IInvoiceParser, HtmlInvoiceParser>();
 builder.Services.AddScoped<ISupplierProductService, SupplierProductService>();
 
+// HttpClient for web scraping and Pushover
+builder.Services.AddHttpClient<IWaitTimeScraper, WaitTimeScraper>();
+builder.Services.AddHttpClient<IPushoverService, PushoverService>();
+
+// Wait time monitoring services (registered via HttpClient above)
+builder.Services.AddScoped<IWaitTimeScraper, WaitTimeScraper>();
+builder.Services.AddScoped<IPushoverService, PushoverService>();
+builder.Services.AddHostedService<WaitTimeMonitoringService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

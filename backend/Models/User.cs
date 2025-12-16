@@ -8,5 +8,8 @@ public class User : IdentityUser<Guid>
     public bool MustChangePassword { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    
+    // Navigation properties
+    public List<WaitTimeNotification> WaitTimeNotifications { get; set; } = new();
 }
 
