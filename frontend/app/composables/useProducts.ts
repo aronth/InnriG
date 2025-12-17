@@ -21,6 +21,19 @@ export interface ProductLookupDto {
     latestPrice?: number
 }
 
+export interface MostOrderedProductDto {
+    productId: string
+    productCode: string
+    productName: string
+    supplierId: string
+    supplierName: string
+    unit?: string
+    totalQuantity: number
+    orderCount: number
+    averageUnitPrice?: number
+    latestUnitPrice?: number
+}
+
 export interface PaginatedResponse<T> {
     items: T[]
     totalCount: number
@@ -130,6 +143,56 @@ export const useProducts = () => {
         document.body.removeChild(a)
     }
 
+    const getMostOrderedProducts = async (
+        fromDate: string,
+        toDate: string,
+        supplierId?: string,
+        limit: number = 50
+    ): Promise<MostOrderedProductDto[]> => {
+        const params = new URLSearchParams()
+        params.append('fromDate', fromDate)
+        params.append('toDate', toDate)
+        if (supplierId) params.append('supplierId', supplierId)
+        params.append('limit', limit.toString())
+
+        const url = `${apiBase}/api/products/most-ordered?${params.toString()}`
+        return await apiFetch<MostOrderedProductDto[]>(url)
+    }
+
+    const exportMostOrderedToCsv = async (
+        fromDate: string,
+        toDate: string,
+        supplierId?: string,
+        limit: number = 500
+    ) => {
+        const params = new URLSearchParams()
+        params.append('fromDate', fromDate)
+        params.append('toDate', toDate)
+        if (supplierId) params.append('supplierId', supplierId)
+        params.append('limit', limit.toString())
+
+        const response = await fetch(
+            `${apiBase}/api/products/most-ordered/export?${params.toString()}`,
+            {
+                credentials: 'include'
+            }
+        )
+        
+        if (!response.ok) {
+            throw new Error('Failed to export CSV')
+        }
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `mest_pantadar_vorur_${fromDate}_${toDate}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+    }
+
     return {
         getAllProducts,
         lookupProducts,
@@ -138,6 +201,8 @@ export const useProducts = () => {
         compareProductPrices,
         compareMultipleProducts,
         deleteProduct,
-        exportToCsv
+        exportToCsv,
+        getMostOrderedProducts,
+        exportMostOrderedToCsv
     }
 }

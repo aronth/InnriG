@@ -970,4 +970,223 @@ public class ProductsController : ControllerBase
 
         return NoContent();
     }
+
+    // Get most ordered products by quantity in a given timeframe
+    [HttpGet("most-ordered")]
+    public async Task<IActionResult> GetMostOrderedProducts(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] int limit = 50)
+    {
+        // Convert dates to UTC (query parameters come as Unspecified)
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+        
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+        
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        // Include the entire end date
+        toDateUtc = toDateUtc.Date.AddDays(1).AddTicks(-1);
+
+        // Validate limit
+        if (limit < 1) limit = 1;
+        if (limit > 500) limit = 500;
+
+        // Query invoice items within the date range - flatten the query first
+        var invoiceItemsQuery = _context.InvoiceItems
+            .Where(ii => ii.Invoice.InvoiceDate >= fromDateUtc && ii.Invoice.InvoiceDate <= toDateUtc);
+
+        // Apply supplier filter if provided
+        if (supplierId.HasValue)
+        {
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        }
+
+        // Select and flatten all needed properties before grouping
+        var flattenedItems = await invoiceItemsQuery
+            .Select(ii => new
+            {
+                ii.ProductId,
+                ProductCode = ii.Product.ProductCode,
+                ProductName = ii.Product.Name,
+                SupplierId = ii.Product.SupplierId,
+                SupplierName = ii.Product.Supplier.Name,
+                ProductUnit = ii.Product.CurrentUnit ?? "",
+                ii.Quantity,
+                ii.UnitPrice,
+                ii.Unit,
+                InvoiceDate = ii.Invoice.InvoiceDate
+            })
+            .ToListAsync();
+
+        // Group and aggregate in memory
+        var mostOrderedProducts = flattenedItems
+            .GroupBy(x => new
+            {
+                x.ProductId,
+                x.ProductCode,
+                x.ProductName,
+                x.SupplierId,
+                x.SupplierName,
+                x.ProductUnit
+            })
+            .Select(g => new MostOrderedProductDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductCode = g.Key.ProductCode,
+                ProductName = g.Key.ProductName,
+                SupplierId = g.Key.SupplierId,
+                SupplierName = g.Key.SupplierName,
+                Unit = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => x.Unit ?? g.Key.ProductUnit)
+                    .FirstOrDefault() ?? g.Key.ProductUnit,
+                TotalQuantity = g.Sum(x => x.Quantity),
+                OrderCount = g.Count(),
+                AverageUnitPrice = g.Average(x => x.UnitPrice),
+                LatestUnitPrice = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => (decimal?)x.UnitPrice)
+                    .FirstOrDefault()
+            })
+            .OrderByDescending(p => p.TotalQuantity)
+            .Take(limit)
+            .ToList();
+
+        return Ok(mostOrderedProducts);
+    }
+
+    // Export most ordered products to CSV
+    [HttpGet("most-ordered/export")]
+    public async Task<IActionResult> ExportMostOrderedProducts(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] int limit = 500)
+    {
+        // Convert dates to UTC (query parameters come as Unspecified)
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+        
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+        
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        // Include the entire end date
+        toDateUtc = toDateUtc.Date.AddDays(1).AddTicks(-1);
+
+        // Validate limit
+        if (limit < 1) limit = 1;
+        if (limit > 500) limit = 500;
+
+        // Query invoice items within the date range - flatten the query first
+        var invoiceItemsQuery = _context.InvoiceItems
+            .Where(ii => ii.Invoice.InvoiceDate >= fromDateUtc && ii.Invoice.InvoiceDate <= toDateUtc);
+
+        // Apply supplier filter if provided
+        if (supplierId.HasValue)
+        {
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        }
+
+        // Select and flatten all needed properties before grouping
+        var flattenedItems = await invoiceItemsQuery
+            .Select(ii => new
+            {
+                ii.ProductId,
+                ProductCode = ii.Product.ProductCode,
+                ProductName = ii.Product.Name,
+                SupplierId = ii.Product.SupplierId,
+                SupplierName = ii.Product.Supplier.Name,
+                ProductUnit = ii.Product.CurrentUnit ?? "",
+                ii.Quantity,
+                ii.UnitPrice,
+                ii.Unit,
+                InvoiceDate = ii.Invoice.InvoiceDate
+            })
+            .ToListAsync();
+
+        // Group and aggregate in memory
+        var mostOrderedProducts = flattenedItems
+            .GroupBy(x => new
+            {
+                x.ProductId,
+                x.ProductCode,
+                x.ProductName,
+                x.SupplierId,
+                x.SupplierName,
+                x.ProductUnit
+            })
+            .Select(g => new MostOrderedProductDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductCode = g.Key.ProductCode,
+                ProductName = g.Key.ProductName,
+                SupplierId = g.Key.SupplierId,
+                SupplierName = g.Key.SupplierName,
+                Unit = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => x.Unit ?? g.Key.ProductUnit)
+                    .FirstOrDefault() ?? g.Key.ProductUnit,
+                TotalQuantity = g.Sum(x => x.Quantity),
+                OrderCount = g.Count(),
+                AverageUnitPrice = g.Average(x => x.UnitPrice),
+                LatestUnitPrice = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => (decimal?)x.UnitPrice)
+                    .FirstOrDefault()
+            })
+            .OrderByDescending(p => p.TotalQuantity)
+            .Take(limit)
+            .ToList();
+
+        // Generate CSV
+        var csv = GenerateMostOrderedCsv(mostOrderedProducts, fromDateUtc, toDateUtc);
+        var fileName = $"mest_pantadar_vorur_{fromDateUtc:yyyyMMdd}_{toDateUtc:yyyyMMdd}.csv";
+        
+        return File(
+            System.Text.Encoding.UTF8.GetBytes(csv),
+            "text/csv; charset=utf-8",
+            fileName);
+    }
+
+    private string GenerateMostOrderedCsv(List<MostOrderedProductDto> data, DateTime fromDate, DateTime toDate)
+    {
+        var csv = new System.Text.StringBuilder();
+        
+        // Header row (Icelandic column names)
+        csv.AppendLine("Röð,Vörunúmer,Vöruheiti,Birgir,Eining,Heildarmagn,Fjöldi pantana,Meðalverð,Síðasta verð");
+        
+        // Data rows
+        var rank = 1;
+        foreach (var item in data)
+        {
+            csv.AppendLine($"{rank}," +
+                          $"{EscapeCsv(item.ProductCode)}," +
+                          $"{EscapeCsv(item.ProductName)}," +
+                          $"{EscapeCsv(item.SupplierName)}," +
+                          $"{EscapeCsv(item.Unit)}," +
+                          $"{item.TotalQuantity.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.OrderCount}," +
+                          $"{(item.AverageUnitPrice.HasValue ? item.AverageUnitPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(item.LatestUnitPrice.HasValue ? item.LatestUnitPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}");
+            rank++;
+        }
+        
+        return csv.ToString();
+    }
 }

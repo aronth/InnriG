@@ -37,3 +37,17 @@ public class ProductLookupDto
     public string SupplierName { get; set; } = string.Empty;
     public decimal? LatestPrice { get; set; }
 }
+
+public class MostOrderedProductDto
+{
+    public Guid ProductId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public Guid SupplierId { get; set; }
+    public string SupplierName { get; set; } = string.Empty;
+    public string? Unit { get; set; }
+    public decimal TotalQuantity { get; set; }
+    public int OrderCount { get; set; } // Number of times this product was ordered
+    public decimal? AverageUnitPrice { get; set; }
+    public decimal? LatestUnitPrice { get; set; }
+}
