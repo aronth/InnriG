@@ -209,12 +209,14 @@ public class ProductsController : ControllerBase
         var history = await _context.InvoiceItems
             .Where(ii => ii.ProductId == id)
             .Include(ii => ii.Invoice)
+                .ThenInclude(i => i.Buyer)
             .OrderByDescending(ii => ii.Invoice.InvoiceDate)
             .Select(ii => new
             {
                 InvoiceId = ii.InvoiceId,
                 InvoiceDate = ii.Invoice.InvoiceDate,
                 InvoiceNumber = ii.Invoice.InvoiceNumber,
+                BuyerName = ii.Invoice.Buyer != null ? ii.Invoice.Buyer.Name : null,
                 Quantity = ii.Quantity,
                 Unit = ii.Unit,
                 ListPrice = ii.ListPrice,

@@ -95,6 +95,9 @@
                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Reikningsnr.
                 </th>
+                <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Kaupandi
+                </th>
                 <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Magn
                 </th>
@@ -127,6 +130,10 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span class="text-sm text-gray-600 font-mono">{{ item.invoiceNumber }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span v-if="item.buyerName" class="text-sm text-gray-700">{{ item.buyerName }}</span>
+                  <span v-else class="text-sm text-gray-400 italic">Ekki tilgreint</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right">
                   <span class="text-sm font-semibold text-gray-900">{{ formatNumber(item.quantity) }}</span>
