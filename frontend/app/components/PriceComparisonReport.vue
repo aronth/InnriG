@@ -2,8 +2,8 @@
   <div class="bg-white rounded-lg shadow-md p-6">
     <h2 class="text-2xl font-bold mb-4">Verðbreytingaskýrsla</h2>
     
-    <!-- Date Selection -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
+    <!-- Date Selection and Filters -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
           Frá dagsetningu
@@ -23,6 +23,24 @@
           type="date"
           class="w-full px-3 py-2 border border-gray-300 rounded-md"
         />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Birgir
+        </label>
+        <select
+          v-model="selectedSupplierId"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md"
+        >
+          <option value="">Allir birgir</option>
+          <option
+            v-for="supplier in suppliers"
+            :key="supplier.id"
+            :value="supplier.id"
+          >
+            {{ supplier.name }}
+          </option>
+        </select>
       </div>
     </div>
 
@@ -77,20 +95,122 @@
     </div>
 
     <!-- Product List -->
-    <div v-else-if="products.length > 0" class="mt-6">
+    <div v-else-if="filteredAndSortedProducts.length > 0" class="mt-6">
       <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vara</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Birgir</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Frá verði</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Til verðs</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Breyting</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">%</th>
+            <th 
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('productName')"
+            >
+              <div class="flex items-center gap-1">
+                Vara
+                <svg 
+                  v-if="sortBy === 'productName'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
+            <th 
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('supplierName')"
+            >
+              <div class="flex items-center gap-1">
+                Birgir
+                <svg 
+                  v-if="sortBy === 'supplierName'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
+            <th 
+              class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('fromUnitPrice')"
+            >
+              <div class="flex items-center justify-end gap-1">
+                Frá verði
+                <svg 
+                  v-if="sortBy === 'fromUnitPrice'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
+            <th 
+              class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('toUnitPrice')"
+            >
+              <div class="flex items-center justify-end gap-1">
+                Til verðs
+                <svg 
+                  v-if="sortBy === 'toUnitPrice'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
+            <th 
+              class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('unitPriceChange')"
+            >
+              <div class="flex items-center justify-end gap-1">
+                Breyting
+                <svg 
+                  v-if="sortBy === 'unitPriceChange'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
+            <th 
+              class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+              @click="toggleSort('unitPriceChangePercent')"
+            >
+              <div class="flex items-center justify-end gap-1">
+                %
+                <svg 
+                  v-if="sortBy === 'unitPriceChangePercent'" 
+                  class="w-3 h-3" 
+                  :class="sortOrder === 'asc' ? '' : 'rotate-180'" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="product in products" :key="product.productId" class="hover:bg-gray-50">
+          <tr v-for="product in filteredAndSortedProducts" :key="product.productId" class="hover:bg-gray-50">
             <td class="px-4 py-3">
               <div class="font-medium">{{ product.productName }}</div>
               <div class="text-sm text-gray-500">{{ product.productCode }}</div>
@@ -127,6 +247,7 @@
 import type { PriceComparisonDto, PriceComparisonSummaryDto } from '~/app/composables/usePriceComparison'
 
 const { getPriceComparison, exportToCsv } = usePriceComparison()
+const { getAllSuppliers } = useSuppliers()
 
 const fromDate = ref('')
 const toDate = ref('')
@@ -134,15 +255,26 @@ const products = ref<PriceComparisonDto[]>([])
 const summary = ref<PriceComparisonSummaryDto | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const suppliers = ref<any[]>([])
+const selectedSupplierId = ref<string>('')
+const sortBy = ref<string>('')
+const sortOrder = ref<'asc' | 'desc'>('asc')
 
 // Set default dates (3 months ago to today)
-onMounted(() => {
+onMounted(async () => {
   const today = new Date()
   const threeMonthsAgo = new Date()
   threeMonthsAgo.setMonth(today.getMonth() - 3)
   
   toDate.value = today.toISOString().split('T')[0]
   fromDate.value = threeMonthsAgo.toISOString().split('T')[0]
+  
+  // Load suppliers for filter
+  try {
+    suppliers.value = await getAllSuppliers()
+  } catch (e: any) {
+    console.error('Error loading suppliers:', e)
+  }
 })
 
 const loadComparison = async () => {
@@ -151,7 +283,8 @@ const loadComparison = async () => {
   try {
     loading.value = true
     error.value = null
-    const result = await getPriceComparison(fromDate.value, toDate.value)
+    const supplierId = selectedSupplierId.value || undefined
+    const result = await getPriceComparison(fromDate.value, toDate.value, supplierId)
     products.value = result.products
     summary.value = result.summary
   } catch (e: any) {
@@ -159,6 +292,68 @@ const loadComparison = async () => {
     console.error('Error loading price comparison:', e)
   } finally {
     loading.value = false
+  }
+}
+
+// Filter and sort products
+const filteredAndSortedProducts = computed(() => {
+  let filtered = products.value
+  
+  // Filter by supplier
+  if (selectedSupplierId.value) {
+    filtered = filtered.filter(p => p.supplierId === selectedSupplierId.value)
+  }
+  
+  // Sort products
+  if (sortBy.value) {
+    filtered = [...filtered].sort((a, b) => {
+      let aVal: any
+      let bVal: any
+      
+      switch (sortBy.value) {
+        case 'productName':
+          aVal = a.productName.toLowerCase()
+          bVal = b.productName.toLowerCase()
+          break
+        case 'supplierName':
+          aVal = a.supplierName.toLowerCase()
+          bVal = b.supplierName.toLowerCase()
+          break
+        case 'fromUnitPrice':
+          aVal = a.fromUnitPrice
+          bVal = b.fromUnitPrice
+          break
+        case 'toUnitPrice':
+          aVal = a.toUnitPrice
+          bVal = b.toUnitPrice
+          break
+        case 'unitPriceChange':
+          aVal = a.unitPriceChange
+          bVal = b.unitPriceChange
+          break
+        case 'unitPriceChangePercent':
+          aVal = a.unitPriceChangePercent
+          bVal = b.unitPriceChangePercent
+          break
+        default:
+          return 0
+      }
+      
+      if (aVal < bVal) return sortOrder.value === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortOrder.value === 'asc' ? 1 : -1
+      return 0
+    })
+  }
+  
+  return filtered
+})
+
+const toggleSort = (field: string) => {
+  if (sortBy.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = field
+    sortOrder.value = 'asc'
   }
 }
 
@@ -189,7 +384,8 @@ const handleExport = async () => {
   if (!fromDate.value || !toDate.value) return
   
   try {
-    await exportToCsv(fromDate.value, toDate.value)
+    const supplierId = selectedSupplierId.value || undefined
+    await exportToCsv(fromDate.value, toDate.value, supplierId)
   } catch (e: any) {
     error.value = e.message || 'Villa við að sækja CSV'
     console.error('Error exporting CSV:', e)
