@@ -45,18 +45,30 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "InnriGreifi.Auth";
     
-    // For development (different ports = cross-origin), use SameSite.None
-    // For production (same origin), use SameSite.Lax for better security
-    if (builder.Environment.IsDevelopment())
+    // Check if we should allow HTTP cookies (for internal deployments without HTTPS)
+    var allowHttpCookies = builder.Configuration.GetValue<bool>("Authentication:AllowHttpCookies", false);
+    var isDevelopment = builder.Environment.IsDevelopment();
+    
+    // Determine cookie security policy
+    if (allowHttpCookies)
     {
+        // For internal HTTP deployments, allow cookies over HTTP
+        options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+        // SameSite.None requires Secure, so use Lax for HTTP
+        options.Cookie.SameSite = SameSiteMode.Lax;
+    }
+    else if (isDevelopment)
+    {
+        // For development (different ports = cross-origin), use SameSite.None
         options.Cookie.SameSite = SameSiteMode.None;
         // SameSite.None requires Secure flag (HTTPS only) per browser security requirements
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     }
     else
     {
+        // For production with HTTPS, use secure cookies
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Require HTTPS in production
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     }
     
     options.Cookie.HttpOnly = true;
