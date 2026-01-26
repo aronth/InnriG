@@ -295,7 +295,6 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useTableBookings } from '~/composables/useTableBookings';
 import { useBookings } from '~/composables/useBookings';
-import { useDebounceFn } from '@vueuse/core';
 import type { BookingDto } from '~/types/booking';
 
 const { getTableBookings } = useTableBookings();
