@@ -66,6 +66,20 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/api/auth/login";
     // Ensure cookie persists across browser sessions
     options.Cookie.IsEssential = true;
+    
+    // For API endpoints, return 401 instead of redirecting
+    // This prevents the middleware from redirecting GET requests to /api/auth/login
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = 401;
+        return Task.CompletedTask;
+    };
+    
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = 403;
+        return Task.CompletedTask;
+    };
 });
 
 builder.Services.AddAuthorization();
