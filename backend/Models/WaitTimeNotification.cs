@@ -10,7 +10,9 @@ public class WaitTimeNotification
     public Guid UserId { get; set; }
     
     [Required]
-    public Restaurant Restaurant { get; set; }
+    public Guid RestaurantId { get; set; }
+    
+    public Restaurant Restaurant { get; set; } = null!;
     
     [Required]
     [MaxLength(100)]

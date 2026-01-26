@@ -11,7 +11,7 @@ namespace InnriGreifi.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Admin")]
 public class WaitTimeNotificationsController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -36,6 +36,7 @@ public class WaitTimeNotificationsController : ControllerBase
             return Unauthorized();
 
         var notifications = await _context.WaitTimeNotifications
+            .Include(n => n.Restaurant)
             .Where(n => n.UserId == currentUser.Id)
             .Select(n => new WaitTimeNotificationDto
             {
@@ -63,6 +64,7 @@ public class WaitTimeNotificationsController : ControllerBase
             return Unauthorized();
 
         var notification = await _context.WaitTimeNotifications
+            .Include(n => n.Restaurant)
             .Where(n => n.Id == id && n.UserId == currentUser.Id)
             .Select(n => new WaitTimeNotificationDto
             {
@@ -100,9 +102,14 @@ public class WaitTimeNotificationsController : ControllerBase
         if (!isValid)
             return BadRequest("Invalid Pushover user key. Please check your user key.");
 
+        // Validate restaurant exists
+        var restaurant = await _context.Restaurants.FindAsync(dto.RestaurantId);
+        if (restaurant == null)
+            return BadRequest("Restaurant not found.");
+
         // Check if notification already exists for this user and restaurant
         var existing = await _context.WaitTimeNotifications
-            .FirstOrDefaultAsync(n => n.UserId == currentUser.Id && n.Restaurant == dto.Restaurant);
+            .FirstOrDefaultAsync(n => n.UserId == currentUser.Id && n.RestaurantId == dto.RestaurantId);
 
         if (existing != null)
             return BadRequest("Notification settings already exist for this restaurant. Use PUT to update.");
@@ -111,7 +118,7 @@ public class WaitTimeNotificationsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             UserId = currentUser.Id,
-            Restaurant = dto.Restaurant,
+            RestaurantId = dto.RestaurantId,
             PushoverUserKey = dto.PushoverUserKey,
             SottThresholdMinutes = dto.SottThresholdMinutes,
             SentThresholdMinutes = dto.SentThresholdMinutes,
@@ -122,6 +129,8 @@ public class WaitTimeNotificationsController : ControllerBase
 
         _context.WaitTimeNotifications.Add(notification);
         await _context.SaveChangesAsync();
+        
+        await _context.Entry(notification).Reference(n => n.Restaurant).LoadAsync();
 
         var result = new WaitTimeNotificationDto
         {

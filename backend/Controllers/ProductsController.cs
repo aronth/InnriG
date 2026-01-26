@@ -1,6 +1,7 @@
 using InnriGreifi.API.Data;
 using InnriGreifi.API.Models;
 using InnriGreifi.API.Models.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,7 @@ namespace InnriGreifi.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
 public class ProductsController : ControllerBase
 {
     private readonly AppDbContext _context;

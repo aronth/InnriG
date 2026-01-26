@@ -4,5 +4,6 @@ export interface User {
     name: string
     mustChangePassword: boolean
     createdAt: string
+    roles: string[]
 }
 

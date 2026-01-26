@@ -14,8 +14,23 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Buyer> Buyers { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<InvoiceItem> InvoiceItems { get; set; }
+    public DbSet<OrderImportBatch> OrderImportBatches { get; set; }
+    public DbSet<OrderRow> OrderRows { get; set; }
+    public DbSet<Restaurant> Restaurants { get; set; }
     public DbSet<WaitTimeNotification> WaitTimeNotifications { get; set; }
     public DbSet<WaitTimeRecord> WaitTimeRecords { get; set; }
+    public DbSet<GiftCard> GiftCards { get; set; }
+    public DbSet<GiftCardTemplate> GiftCardTemplates { get; set; }
+    public DbSet<GiftCardNumberSequence> GiftCardNumberSequences { get; set; }
+    public DbSet<EmailConversation> EmailConversations { get; set; }
+    public DbSet<EmailMessage> EmailMessages { get; set; }
+    public DbSet<EmailAttachment> EmailAttachments { get; set; }
+    public DbSet<EmailClassificationQueue> EmailClassificationQueues { get; set; }
+    public DbSet<EmailExtractedData> EmailExtractedData { get; set; }
+    public DbSet<UserEmailMapping> UserEmailMappings { get; set; }
+    public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
+    public DbSet<WorkflowStepExecution> WorkflowStepExecutions { get; set; }
+    public DbSet<WorkflowApproval> WorkflowApprovals { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -108,7 +123,258 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .OnDelete(DeleteBehavior.Cascade);
         
         modelBuilder.Entity<WaitTimeNotification>()
-            .HasIndex(wtn => new { wtn.UserId, wtn.Restaurant })
+            .HasOne(wtn => wtn.Restaurant)
+            .WithMany()
+            .HasForeignKey(wtn => wtn.RestaurantId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        modelBuilder.Entity<WaitTimeNotification>()
+            .HasIndex(wtn => new { wtn.UserId, wtn.RestaurantId })
             .IsUnique();
+        
+        // WaitTimeRecord Configuration
+        modelBuilder.Entity<WaitTimeRecord>()
+            .HasOne(wtr => wtr.Restaurant)
+            .WithMany()
+            .HasForeignKey(wtr => wtr.RestaurantId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        // GiftCard Configuration
+        modelBuilder.Entity<GiftCard>()
+            .HasIndex(gc => gc.Number)
+            .IsUnique();
+        
+        modelBuilder.Entity<GiftCard>()
+            .Property(gc => gc.Amount)
+            .HasPrecision(18, 2);
+        
+        modelBuilder.Entity<GiftCard>()
+            .HasOne(gc => gc.Template)
+            .WithMany(t => t.GiftCards)
+            .HasForeignKey(gc => gc.TemplateId)
+            .OnDelete(DeleteBehavior.SetNull);
+        
+        modelBuilder.Entity<GiftCard>()
+            .HasOne(gc => gc.CreatedBy)
+            .WithMany()
+            .HasForeignKey(gc => gc.CreatedById)
+            .OnDelete(DeleteBehavior.SetNull);
+        
+        modelBuilder.Entity<GiftCard>()
+            .HasOne(gc => gc.Restaurant)
+            .WithMany()
+            .HasForeignKey(gc => gc.RestaurantId)
+            .OnDelete(DeleteBehavior.SetNull);
+        
+        // GiftCardTemplate Configuration
+        modelBuilder.Entity<GiftCardTemplate>()
+            .HasOne(t => t.Restaurant)
+            .WithMany()
+            .HasForeignKey(t => t.RestaurantId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Orders (Excel imports)
+        modelBuilder.Entity<OrderImportBatch>()
+            .Property(b => b.FileName)
+            .HasMaxLength(300);
+
+        modelBuilder.Entity<OrderRow>()
+            .HasOne(r => r.OrderImportBatch)
+            .WithMany(b => b.Rows)
+            .HasForeignKey(r => r.OrderImportBatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OrderRow>()
+            .Property(r => r.TotalAmountWithVat)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<OrderRow>()
+            .Property(r => r.DeliveryMethod)
+            .HasMaxLength(20);
+
+        modelBuilder.Entity<OrderRow>()
+            .Property(r => r.OrderSource)
+            .HasMaxLength(20);
+
+        modelBuilder.Entity<OrderRow>()
+            .Property(r => r.OrderTime)
+            .HasColumnType("time without time zone");
+
+        modelBuilder.Entity<OrderRow>()
+            .Property(r => r.ReadyTime)
+            .HasColumnType("time without time zone");
+
+        modelBuilder.Entity<OrderRow>()
+            .HasIndex(r => r.OrderNumber);
+
+        modelBuilder.Entity<OrderRow>()
+            .HasIndex(r => r.CreatedDate);
+
+        // Restaurant Configuration
+        modelBuilder.Entity<Restaurant>()
+            .HasIndex(r => r.Code)
+            .IsUnique();
+
+        modelBuilder.Entity<Restaurant>()
+            .HasIndex(r => r.Name)
+            .IsUnique();
+
+        // OrderRow Restaurant relationship
+        modelBuilder.Entity<OrderRow>()
+            .HasOne(r => r.Restaurant)
+            .WithMany()
+            .HasForeignKey(r => r.RestaurantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // EmailConversation Configuration
+        modelBuilder.Entity<EmailConversation>()
+            .HasIndex(ec => ec.GraphConversationId)
+            .IsUnique();
+
+        modelBuilder.Entity<EmailConversation>()
+            .HasIndex(ec => ec.AssignedToUserId);
+
+        modelBuilder.Entity<EmailConversation>()
+            .HasIndex(ec => ec.Status);
+
+        modelBuilder.Entity<EmailConversation>()
+            .HasOne(ec => ec.AssignedTo)
+            .WithMany()
+            .HasForeignKey(ec => ec.AssignedToUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<EmailConversation>()
+            .HasOne(ec => ec.ExtractedData)
+            .WithOne(ed => ed.Conversation)
+            .HasForeignKey<EmailExtractedData>(ed => ed.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // EmailMessage Configuration
+        modelBuilder.Entity<EmailMessage>()
+            .HasIndex(em => em.GraphMessageId)
+            .IsUnique();
+
+        modelBuilder.Entity<EmailMessage>()
+            .HasIndex(em => em.GraphConversationId);
+
+        modelBuilder.Entity<EmailMessage>()
+            .HasIndex(em => em.ConversationId);
+
+        modelBuilder.Entity<EmailMessage>()
+            .HasIndex(em => em.SentByUserId);
+
+        modelBuilder.Entity<EmailMessage>()
+            .HasOne(em => em.Conversation)
+            .WithMany(ec => ec.Messages)
+            .HasForeignKey(em => em.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<EmailMessage>()
+            .HasOne(em => em.SentBy)
+            .WithMany()
+            .HasForeignKey(em => em.SentByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // EmailAttachment Configuration
+        modelBuilder.Entity<EmailAttachment>()
+            .HasOne(ea => ea.Message)
+            .WithMany(em => em.Attachments)
+            .HasForeignKey(ea => ea.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // EmailClassificationQueue Configuration
+        modelBuilder.Entity<EmailClassificationQueue>()
+            .HasIndex(eq => eq.MessageId);
+
+        modelBuilder.Entity<EmailClassificationQueue>()
+            .HasIndex(eq => eq.Status);
+
+        modelBuilder.Entity<EmailClassificationQueue>()
+            .HasIndex(eq => eq.QueuedAt);
+
+        modelBuilder.Entity<EmailClassificationQueue>()
+            .HasOne(eq => eq.Message)
+            .WithMany()
+            .HasForeignKey(eq => eq.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // EmailExtractedData Configuration
+        modelBuilder.Entity<EmailExtractedData>()
+            .HasIndex(ed => ed.ConversationId);
+
+        modelBuilder.Entity<EmailExtractedData>()
+            .HasIndex(ed => ed.MessageId);
+
+        modelBuilder.Entity<EmailExtractedData>()
+            .HasOne(ed => ed.Message)
+            .WithMany()
+            .HasForeignKey(ed => ed.MessageId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // UserEmailMapping Configuration
+        modelBuilder.Entity<UserEmailMapping>()
+            .HasIndex(uem => uem.UserId);
+
+        modelBuilder.Entity<UserEmailMapping>()
+            .HasIndex(uem => new { uem.UserId, uem.EmailAddress })
+            .IsUnique();
+
+        modelBuilder.Entity<UserEmailMapping>()
+            .HasOne(uem => uem.User)
+            .WithMany()
+            .HasForeignKey(uem => uem.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WorkflowInstance Configuration
+        modelBuilder.Entity<WorkflowInstance>()
+            .HasIndex(wi => wi.ConversationId)
+            .IsUnique();
+
+        modelBuilder.Entity<WorkflowInstance>()
+            .HasIndex(wi => wi.State);
+
+        modelBuilder.Entity<WorkflowInstance>()
+            .HasIndex(wi => wi.WorkflowType);
+
+        modelBuilder.Entity<WorkflowInstance>()
+            .HasOne(wi => wi.Conversation)
+            .WithMany()
+            .HasForeignKey(wi => wi.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WorkflowStepExecution Configuration
+        modelBuilder.Entity<WorkflowStepExecution>()
+            .HasIndex(wse => wse.WorkflowInstanceId);
+
+        modelBuilder.Entity<WorkflowStepExecution>()
+            .HasIndex(wse => wse.Status);
+
+        modelBuilder.Entity<WorkflowStepExecution>()
+            .HasOne(wse => wse.WorkflowInstance)
+            .WithMany(wi => wi.StepExecutions)
+            .HasForeignKey(wse => wse.WorkflowInstanceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WorkflowApproval Configuration
+        modelBuilder.Entity<WorkflowApproval>()
+            .HasIndex(wa => wa.WorkflowInstanceId);
+
+        modelBuilder.Entity<WorkflowApproval>()
+            .HasIndex(wa => wa.Status);
+
+        modelBuilder.Entity<WorkflowApproval>()
+            .HasIndex(wa => wa.ApprovedByUserId);
+
+        modelBuilder.Entity<WorkflowApproval>()
+            .HasOne(wa => wa.WorkflowInstance)
+            .WithMany(wi => wi.Approvals)
+            .HasForeignKey(wa => wa.WorkflowInstanceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WorkflowApproval>()
+            .HasOne(wa => wa.ApprovedBy)
+            .WithMany()
+            .HasForeignKey(wa => wa.ApprovedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

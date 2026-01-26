@@ -77,7 +77,7 @@ public class WaitTimeMonitoringService : IHostedService, IDisposable
                     var record = new WaitTimeRecord
                     {
                         Id = Guid.NewGuid(),
-                        Restaurant = result.Restaurant,
+                        RestaurantId = result.Restaurant.Id,
                         SottMinutes = result.SottMinutes,
                         SentMinutes = result.SentMinutes,
                         IsClosed = result.IsClosed,
@@ -119,7 +119,7 @@ public class WaitTimeMonitoringService : IHostedService, IDisposable
         {
             // Get all enabled notifications for this restaurant
             var notifications = await context.WaitTimeNotifications
-                .Where(n => n.Restaurant == result.Restaurant && n.IsEnabled)
+                .Where(n => n.RestaurantId == result.Restaurant.Id && n.IsEnabled)
                 .ToListAsync();
 
             foreach (var notification in notifications)
@@ -133,7 +133,7 @@ public class WaitTimeMonitoringService : IHostedService, IDisposable
                     // We only notify once when crossing the threshold
                     // If LastNotifiedSott is null or the previous value was below threshold, send notification
                     var previousRecord = await context.WaitTimeRecords
-                        .Where(r => r.Restaurant == result.Restaurant && r.SottMinutes.HasValue)
+                        .Where(r => r.RestaurantId == result.Restaurant.Id && r.SottMinutes.HasValue)
                         .OrderByDescending(r => r.ScrapedAt)
                         .Skip(1) // Skip the current one we just added
                         .FirstOrDefaultAsync();
@@ -179,7 +179,7 @@ public class WaitTimeMonitoringService : IHostedService, IDisposable
                 {
                     // Check if we already notified for this threshold crossing
                     var previousRecord = await context.WaitTimeRecords
-                        .Where(r => r.Restaurant == result.Restaurant && r.SentMinutes.HasValue)
+                        .Where(r => r.RestaurantId == result.Restaurant.Id && r.SentMinutes.HasValue)
                         .OrderByDescending(r => r.ScrapedAt)
                         .Skip(1) // Skip the current one we just added
                         .FirstOrDefaultAsync();

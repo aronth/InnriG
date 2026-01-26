@@ -23,7 +23,7 @@
               </p>
               <NuxtLink
                 v-if="localInvoice.existingInvoiceId"
-                :to="`/invoices/${localInvoice.existingInvoiceId}`"
+                :to="`/products/invoices/${localInvoice.existingInvoiceId}`"
                 class="mt-2 inline-flex items-center text-sm font-medium text-red-800 hover:text-red-900 underline"
               >
                 Skoða fyrirliggjandi reikning

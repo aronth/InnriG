@@ -57,15 +57,65 @@ export const useAuth = () => {
         return user
     }
 
-    const createUser = async (username: string, name: string): Promise<User> => {
+    const createUser = async (username: string, name: string, role?: string): Promise<User> => {
         return await apiFetch<User>(`${apiBase}/api/auth/create-user`, {
             method: 'POST',
             body: {
                 username,
-                name
+                name,
+                role
             }
         })
     }
+
+    const assignRole = async (userId: string, role: string): Promise<User> => {
+        return await apiFetch<User>(`${apiBase}/api/auth/assign-role`, {
+            method: 'POST',
+            body: {
+                userId,
+                role
+            }
+        })
+    }
+
+    const removeRole = async (userId: string, role: string): Promise<User> => {
+        return await apiFetch<User>(`${apiBase}/api/auth/remove-role`, {
+            method: 'POST',
+            body: {
+                userId,
+                role
+            }
+        })
+    }
+
+    const getAvailableRoles = async (): Promise<string[]> => {
+        return await apiFetch<string[]>(`${apiBase}/api/auth/roles`)
+    }
+
+    const updateProfile = async (name: string): Promise<User> => {
+        const user = await apiFetch<User>(`${apiBase}/api/auth/profile`, {
+            method: 'PUT',
+            body: {
+                name
+            }
+        })
+        currentUser.value = user
+        return user
+    }
+
+    // Role checking helpers
+    const hasRole = (role: string): boolean => {
+        return currentUser.value?.roles?.includes(role) ?? false
+    }
+
+    const isAdmin = computed(() => hasRole('Admin'))
+    const isManager = computed(() => hasRole('Manager') || isAdmin.value)
+    const isUser = computed(() => hasRole('User') || isManager.value)
+
+    // Can access specific features
+    const canAccessBookings = computed(() => isUser.value)
+    const canAccessGiftCards = computed(() => isManager.value)
+    const canAccessAdmin = computed(() => isAdmin.value)
 
     return {
         currentUser: readonly(currentUser),
@@ -74,7 +124,19 @@ export const useAuth = () => {
         logout,
         getCurrentUser,
         changePassword,
-        createUser
+        updateProfile,
+        createUser,
+        assignRole,
+        removeRole,
+        getAvailableRoles,
+        // Role checks
+        hasRole,
+        isAdmin,
+        isManager,
+        isUser,
+        canAccessBookings,
+        canAccessGiftCards,
+        canAccessAdmin
     }
 }
 

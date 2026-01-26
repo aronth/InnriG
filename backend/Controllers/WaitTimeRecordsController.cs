@@ -1,6 +1,7 @@
 using InnriGreifi.API.Data;
 using InnriGreifi.API.Models;
 using InnriGreifi.API.Models.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,7 @@ namespace InnriGreifi.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
 public class WaitTimeRecordsController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -19,14 +21,16 @@ public class WaitTimeRecordsController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetRecords(
-        [FromQuery] Restaurant? restaurant = null,
+        [FromQuery] Guid? restaurantId = null,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null)
     {
-        var query = _context.WaitTimeRecords.AsQueryable();
+        var query = _context.WaitTimeRecords
+            .Include(r => r.Restaurant)
+            .AsQueryable();
 
-        if (restaurant.HasValue)
-            query = query.Where(r => r.Restaurant == restaurant.Value);
+        if (restaurantId.HasValue)
+            query = query.Where(r => r.RestaurantId == restaurantId.Value);
 
         if (from.HasValue)
         {
@@ -71,15 +75,24 @@ public class WaitTimeRecordsController : ControllerBase
     [HttpGet("latest")]
     public async Task<IActionResult> GetLatestRecords()
     {
-        var latestGreifinn = await _context.WaitTimeRecords
-            .Where(r => r.Restaurant == Restaurant.Greifinn)
-            .OrderByDescending(r => r.ScrapedAt)
-            .FirstOrDefaultAsync();
+        var greifinn = await _context.Restaurants.FirstOrDefaultAsync(r => r.Code == "GRE");
+        var spretturinn = await _context.Restaurants.FirstOrDefaultAsync(r => r.Code == "SPR");
 
-        var latestSpretturinn = await _context.WaitTimeRecords
-            .Where(r => r.Restaurant == Restaurant.Spretturinn)
-            .OrderByDescending(r => r.ScrapedAt)
-            .FirstOrDefaultAsync();
+        var latestGreifinn = greifinn != null
+            ? await _context.WaitTimeRecords
+                .Include(r => r.Restaurant)
+                .Where(r => r.RestaurantId == greifinn.Id)
+                .OrderByDescending(r => r.ScrapedAt)
+                .FirstOrDefaultAsync()
+            : null;
+
+        var latestSpretturinn = spretturinn != null
+            ? await _context.WaitTimeRecords
+                .Include(r => r.Restaurant)
+                .Where(r => r.RestaurantId == spretturinn.Id)
+                .OrderByDescending(r => r.ScrapedAt)
+                .FirstOrDefaultAsync()
+            : null;
 
         var result = new List<WaitTimeRecordDto>();
 

@@ -1,6 +1,8 @@
 using HtmlAgilityPack;
+using InnriGreifi.API.Data;
 using InnriGreifi.API.Models;
 using InnriGreifi.API.Models.DTOs;
+using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 
 namespace InnriGreifi.API.Services;
@@ -9,11 +11,13 @@ public class WaitTimeScraper : IWaitTimeScraper
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<WaitTimeScraper> _logger;
+    private readonly AppDbContext _context;
 
-    public WaitTimeScraper(HttpClient httpClient, ILogger<WaitTimeScraper> logger)
+    public WaitTimeScraper(HttpClient httpClient, ILogger<WaitTimeScraper> logger, AppDbContext context)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _context = context;
         
         // Set user agent to avoid being blocked
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
@@ -22,32 +26,43 @@ public class WaitTimeScraper : IWaitTimeScraper
 
     public async Task<WaitTimeResultDto> ScrapeAsync(Restaurant restaurant)
     {
-        return restaurant switch
+        if (restaurant.Code == "GRE")
+            return await ScrapeGreifinnAsync();
+        if (restaurant.Code == "SPR")
+            return await ScrapeSpretturinnAsync();
+        
+        return new WaitTimeResultDto
         {
-            Restaurant.Greifinn => await ScrapeGreifinnAsync(),
-            Restaurant.Spretturinn => await ScrapeSpretturinnAsync(),
-            _ => new WaitTimeResultDto
-            {
-                Restaurant = restaurant,
-                Success = false,
-                ErrorMessage = "Unknown restaurant"
-            }
+            Restaurant = restaurant,
+            Success = false,
+            ErrorMessage = "Unknown restaurant"
         };
     }
 
     public async Task<WaitTimeResultDto> ScrapeGreifinnAsync()
     {
+        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.Code == "GRE");
+        if (restaurant == null)
+        {
+            return new WaitTimeResultDto
+            {
+                Restaurant = null!,
+                Success = false,
+                ErrorMessage = "Greifinn restaurant not found in database"
+            };
+        }
+
         try
         {
             var html = await _httpClient.GetStringAsync("https://greifinn.is");
-            return ParseGreifinn(html);
+            return ParseGreifinn(html, restaurant);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error scraping Greifinn");
             return new WaitTimeResultDto
             {
-                Restaurant = Restaurant.Greifinn,
+                Restaurant = restaurant,
                 Success = false,
                 ErrorMessage = ex.Message
             };
@@ -56,24 +71,35 @@ public class WaitTimeScraper : IWaitTimeScraper
 
     public async Task<WaitTimeResultDto> ScrapeSpretturinnAsync()
     {
+        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.Code == "SPR");
+        if (restaurant == null)
+        {
+            return new WaitTimeResultDto
+            {
+                Restaurant = null!,
+                Success = false,
+                ErrorMessage = "Spretturinn restaurant not found in database"
+            };
+        }
+
         try
         {
             var html = await _httpClient.GetStringAsync("https://spretturinn.is");
-            return ParseSpretturinn(html);
+            return ParseSpretturinn(html, restaurant);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error scraping Spretturinn");
             return new WaitTimeResultDto
             {
-                Restaurant = Restaurant.Spretturinn,
+                Restaurant = restaurant,
                 Success = false,
                 ErrorMessage = ex.Message
             };
         }
     }
 
-    private WaitTimeResultDto ParseGreifinn(string html)
+    private WaitTimeResultDto ParseGreifinn(string html, Restaurant restaurant)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
@@ -84,7 +110,7 @@ public class WaitTimeScraper : IWaitTimeScraper
         {
             return new WaitTimeResultDto
             {
-                Restaurant = Restaurant.Greifinn,
+                Restaurant = restaurant,
                 IsClosed = true,
                 Success = true,
                 ScrapedAt = DateTime.UtcNow
@@ -140,7 +166,7 @@ public class WaitTimeScraper : IWaitTimeScraper
 
         return new WaitTimeResultDto
         {
-            Restaurant = Restaurant.Greifinn,
+            Restaurant = restaurant,
             SottMinutes = sottMinutes,
             SentMinutes = sentMinutes,
             IsClosed = false,
@@ -149,7 +175,7 @@ public class WaitTimeScraper : IWaitTimeScraper
         };
     }
 
-    private WaitTimeResultDto ParseSpretturinn(string html)
+    private WaitTimeResultDto ParseSpretturinn(string html, Restaurant restaurant)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
@@ -160,7 +186,7 @@ public class WaitTimeScraper : IWaitTimeScraper
         {
             return new WaitTimeResultDto
             {
-                Restaurant = Restaurant.Spretturinn,
+                Restaurant = restaurant,
                 IsClosed = true,
                 Success = true,
                 ScrapedAt = DateTime.UtcNow
@@ -215,7 +241,7 @@ public class WaitTimeScraper : IWaitTimeScraper
 
         return new WaitTimeResultDto
         {
-            Restaurant = Restaurant.Spretturinn,
+            Restaurant = restaurant,
             SottMinutes = sottMinutes,
             SentMinutes = sentMinutes,
             IsClosed = false,

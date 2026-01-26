@@ -53,13 +53,15 @@ public class AuthController : ControllerBase
             cookieSet = true;
         }
 
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return Ok(new
@@ -85,20 +87,22 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized();
 
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return Ok(userDto);
     }
 
     [HttpPost("create-user")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserDto createUserDto)
     {
         if (!ModelState.IsValid)
@@ -108,6 +112,12 @@ public class AuthController : ControllerBase
         var existingUser = await _userManager.FindByNameAsync(createUserDto.Username);
         if (existingUser != null)
             return BadRequest("Username already exists");
+
+        // Validate role if provided
+        var roleName = string.IsNullOrEmpty(createUserDto.Role) ? "User" : createUserDto.Role;
+        var validRoles = new[] { "Admin", "Manager", "User" };
+        if (!validRoles.Contains(roleName))
+            return BadRequest($"Invalid role. Valid roles are: {string.Join(", ", validRoles)}");
 
         var user = new User
         {
@@ -123,13 +133,20 @@ public class AuthController : ControllerBase
         if (!result.Succeeded)
             return BadRequest(result.Errors.Select(e => e.Description));
 
+        // Assign role (default to "User")
+        var roleResult = await _userManager.AddToRoleAsync(user, roleName);
+        if (!roleResult.Succeeded)
+            return BadRequest(roleResult.Errors.Select(e => e.Description));
+
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return CreatedAtAction(nameof(GetCurrentUser), new { id = user.Id }, userDto);
@@ -159,13 +176,124 @@ public class AuthController : ControllerBase
         await _signInManager.SignOutAsync();
         await _signInManager.SignInAsync(user, true);
 
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
+        };
+
+        return Ok(userDto);
+    }
+
+    [HttpPost("assign-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignRole([FromBody] AssignRoleDto assignRoleDto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.FindByIdAsync(assignRoleDto.UserId.ToString());
+        if (user == null)
+            return NotFound("User not found");
+
+        var validRoles = new[] { "Admin", "Manager", "User" };
+        if (!validRoles.Contains(assignRoleDto.Role))
+            return BadRequest($"Invalid role. Valid roles are: {string.Join(", ", validRoles)}");
+
+        if (await _userManager.IsInRoleAsync(user, assignRoleDto.Role))
+            return BadRequest($"User already has the {assignRoleDto.Role} role");
+
+        var result = await _userManager.AddToRoleAsync(user, assignRoleDto.Role);
+        if (!result.Succeeded)
+            return BadRequest(result.Errors.Select(e => e.Description));
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var userDto = new UserDto
+        {
+            Id = user.Id,
+            Username = user.UserName ?? string.Empty,
+            Name = user.Name,
+            MustChangePassword = user.MustChangePassword,
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
+        };
+
+        return Ok(userDto);
+    }
+
+    [HttpPost("remove-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RemoveRole([FromBody] RemoveRoleDto removeRoleDto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.FindByIdAsync(removeRoleDto.UserId.ToString());
+        if (user == null)
+            return NotFound("User not found");
+
+        if (!await _userManager.IsInRoleAsync(user, removeRoleDto.Role))
+            return BadRequest($"User does not have the {removeRoleDto.Role} role");
+
+        var result = await _userManager.RemoveFromRoleAsync(user, removeRoleDto.Role);
+        if (!result.Succeeded)
+            return BadRequest(result.Errors.Select(e => e.Description));
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var userDto = new UserDto
+        {
+            Id = user.Id,
+            Username = user.UserName ?? string.Empty,
+            Name = user.Name,
+            MustChangePassword = user.MustChangePassword,
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
+        };
+
+        return Ok(userDto);
+    }
+
+    [HttpGet("roles")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetAvailableRoles()
+    {
+        var roles = new[] { "Admin", "Manager", "User" };
+        return Ok(roles);
+    }
+
+    [HttpPut("profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto updateProfileDto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized();
+
+        // Update name only (username is immutable)
+        user.Name = updateProfileDto.Name;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return BadRequest(result.Errors.Select(e => e.Description));
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var userDto = new UserDto
+        {
+            Id = user.Id,
+            Username = user.UserName ?? string.Empty,
+            Name = user.Name,
+            MustChangePassword = user.MustChangePassword,
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return Ok(userDto);

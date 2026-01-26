@@ -1,7 +1,3 @@
-export enum Restaurant {
-    Greifinn = 0,
-    Spretturinn = 1
-}
 
 export interface WaitTimeRecordDto {
     id: string

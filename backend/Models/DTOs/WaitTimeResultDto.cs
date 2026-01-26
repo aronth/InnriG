@@ -4,8 +4,8 @@ namespace InnriGreifi.API.Models.DTOs;
 
 public class WaitTimeResultDto
 {
-    public Restaurant Restaurant { get; set; }
-    public string RestaurantName => Restaurant.ToString();
+    public Restaurant Restaurant { get; set; } = null!;
+    public string RestaurantName => Restaurant?.Name ?? "Unknown";
     public int? SottMinutes { get; set; }
     public int? SentMinutes { get; set; }
     public bool IsClosed { get; set; }

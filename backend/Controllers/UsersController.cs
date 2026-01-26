@@ -9,7 +9,7 @@ namespace InnriGreifi.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Admin")]
 public class UsersController : ControllerBase
 {
     private readonly UserManager<User> _userManager;

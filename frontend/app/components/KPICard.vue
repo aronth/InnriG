@@ -1,73 +1,82 @@
 <template>
-  <div class="bg-white rounded-lg shadow-md p-6">
-    <h3 class="text-lg font-semibold text-gray-800 mb-2">{{ title }}</h3>
-    <p class="text-sm text-gray-600 mb-4">{{ description }}</p>
-    
-    <div class="flex items-baseline gap-2 mb-2">
-      <span class="text-4xl font-bold" :class="getStatusColor()">
-        {{ formatValue(current) }}{{ unit }}
-      </span>
-      <span v-if="target > 0" class="text-gray-500">
-        / {{ formatValue(target) }}{{ unit }}
-      </span>
-    </div>
-    
-    <div class="mb-4">
-      <div class="w-full bg-gray-200 rounded-full h-2.5">
-        <div
-          class="h-2.5 rounded-full transition-all"
-          :class="getProgressBarColor()"
-          :style="{ width: `${Math.min((current / (target || 1)) * 100, 100)}%` }"
-        ></div>
+  <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+    <p class="text-sm text-gray-500 mb-2">{{ title }}</p>
+    <div class="flex items-baseline justify-between">
+      <p class="text-3xl font-bold text-gray-900">
+        {{ formatValue(current, format) }}
+      </p>
+      <div v-if="previous !== null && previous !== undefined" class="flex items-center gap-1">
+        <span :class="getChangeColor(change, inverse)" class="text-sm font-medium">
+          {{ formatChange(change) }}
+        </span>
+        <span :class="getChangeIconColor(change, inverse)" class="text-lg">
+          {{ getChangeIcon(change) }}
+        </span>
       </div>
     </div>
-    
-    <div class="flex items-center justify-between">
-      <span class="text-sm" :class="getStatusTextColor()">
-        {{ status }}
-      </span>
-      <span class="text-xs text-gray-500">{{ details }}</span>
-    </div>
+    <p v-if="previous !== null && previous !== undefined" class="text-xs text-gray-400 mt-2">
+      Fyrri: {{ formatValue(previous, format) }}
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
 interface Props {
   title: string
-  current: number
-  target: number
-  status: string
-  details: string
-  unit: string
-  description: string
-  inverted?: boolean
+  current: number | null | undefined
+  previous: number | null | undefined
+  change?: number | null
+  format?: 'number' | 'currency' | 'percent' | 'minutes'
+  inverse?: boolean // If true, negative change is good (e.g., for late ratio, wait time)
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  format: 'number',
+  inverse: false
+})
 
-const formatValue = (value: number) => {
-  return new Intl.NumberFormat('is-IS', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  }).format(value)
+const formatValue = (value: number | null | undefined, format: string) => {
+  if (value === null || value === undefined) return '-'
+  
+  switch (format) {
+    case 'currency':
+      return new Intl.NumberFormat('is-IS', {
+        style: 'currency',
+        currency: 'ISK',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(value)
+    case 'percent':
+      return `${value.toFixed(1)}%`
+    case 'minutes':
+      return `${Math.round(value)} mín`
+    default:
+      return value.toLocaleString('is-IS')
+  }
 }
 
-const getStatusColor = () => {
-  if (props.status === 'Met') return 'text-green-600'
-  if (props.status === 'Ekki metið') return 'text-red-600'
-  return 'text-indigo-600'
+const formatChange = (change: number | null | undefined) => {
+  if (change === null || change === undefined) return ''
+  const sign = change >= 0 ? '+' : ''
+  return `${sign}${change.toFixed(1)}%`
 }
 
-const getProgressBarColor = () => {
-  if (props.status === 'Met') return 'bg-green-600'
-  if (props.status === 'Ekki metið') return 'bg-red-600'
-  return 'bg-indigo-600'
+const getChangeColor = (change: number | null | undefined, inverse: boolean) => {
+  if (change === null || change === undefined) return 'text-gray-500'
+  const isGood = inverse ? change < 0 : change > 0
+  return isGood ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-500'
 }
 
-const getStatusTextColor = () => {
-  if (props.status === 'Met') return 'text-green-700 font-semibold'
-  if (props.status === 'Ekki metið') return 'text-red-700 font-semibold'
-  return 'text-indigo-700'
+const getChangeIconColor = (change: number | null | undefined, inverse: boolean) => {
+  if (change === null || change === undefined) return 'text-gray-500'
+  const isGood = inverse ? change < 0 : change > 0
+  return isGood ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-500'
+}
+
+const getChangeIcon = (change: number | null | undefined) => {
+  if (change === null || change === undefined) return '→'
+  if (change > 0) return '↑'
+  if (change < 0) return '↓'
+  return '→'
 }
 </script>
-

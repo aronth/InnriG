@@ -8,7 +8,25 @@
           active-class="border-indigo-500 text-indigo-600"
           :class="[$route.path === '/products' ? '' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
         >
+          Yfirlit
+        </NuxtLink>
+        
+        <NuxtLink 
+          to="/products/import" 
+          class="whitespace-nowrap pb-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200"
+          active-class="border-indigo-500 text-indigo-600"
+          :class="[$route.path === '/products/import' ? '' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+        >
           Lesa inn reikning
+        </NuxtLink>
+        
+        <NuxtLink 
+          to="/products/invoices" 
+          class="whitespace-nowrap pb-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200"
+          active-class="border-indigo-500 text-indigo-600"
+          :class="[$route.path.startsWith('/products/invoices') ? '' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+        >
+          Reikningar
         </NuxtLink>
         
         <NuxtLink 
@@ -27,6 +45,15 @@
           :class="[$route.path === '/products/compare' ? '' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
         >
           Verðsamanburður
+        </NuxtLink>
+        
+        <NuxtLink 
+          to="/products/verdproun" 
+          class="whitespace-nowrap pb-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200"
+          active-class="border-indigo-500 text-indigo-600"
+          :class="[$route.path === '/products/verdproun' ? '' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+        >
+          Verðþróun
         </NuxtLink>
         
         <NuxtLink 

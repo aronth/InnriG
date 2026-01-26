@@ -5,8 +5,8 @@ namespace InnriGreifi.API.Models.DTOs;
 public class WaitTimeRecordDto
 {
     public Guid Id { get; set; }
-    public Restaurant Restaurant { get; set; }
-    public string RestaurantName => Restaurant.ToString();
+    public Restaurant Restaurant { get; set; } = null!;
+    public string RestaurantName => Restaurant?.Name ?? "Unknown";
     public int? SottMinutes { get; set; }
     public int? SentMinutes { get; set; }
     public bool IsClosed { get; set; }

@@ -5,7 +5,7 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <NuxtLink
-            to="/invoices"
+            to="/products/invoices"
             class="p-2 hover:bg-white/50 rounded-lg transition-colors duration-200"
           >
             <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,7 +40,7 @@
       <h3 class="text-xl font-bold text-red-900 mb-2">Villa kom upp</h3>
       <p class="text-red-700">{{ error }}</p>
       <NuxtLink
-        to="/invoices"
+        to="/products/invoices"
         class="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
       >
         Til baka

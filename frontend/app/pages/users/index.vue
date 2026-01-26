@@ -50,6 +50,9 @@
               Nafn
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Hlutverk
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Stöða
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -69,6 +72,21 @@
               {{ user.name }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="role in user.roles"
+                  :key="role"
+                  :class="getRoleBadgeClass(role)"
+                  class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                >
+                  {{ getRoleLabel(role) }}
+                </span>
+                <span v-if="!user.roles || user.roles.length === 0" class="text-xs text-gray-400 italic">
+                  Ekkert hlutverk
+                </span>
+              </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
               <span
                 v-if="user.mustChangePassword"
                 class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800"
@@ -86,6 +104,13 @@
               {{ formatDate(user.createdAt) }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <button
+                @click="manageRoles(user)"
+                class="text-purple-600 hover:text-purple-900 mr-4"
+                title="Stjórna hlutverkum"
+              >
+                Hlutverk
+              </button>
               <button
                 @click="editUser(user)"
                 class="text-indigo-600 hover:text-indigo-900 mr-4"
@@ -141,6 +166,22 @@
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-3 py-2 border"
                         placeholder="Fullt nafn"
                       />
+                    </div>
+                    <div>
+                      <label for="create-role" class="block text-sm font-medium text-gray-700">
+                        Hlutverk
+                      </label>
+                      <select
+                        id="create-role"
+                        v-model="createForm.role"
+                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-3 py-2 border"
+                      >
+                        <option value="">Notandi (sjálfgefið)</option>
+                        <option value="User">Notandi</option>
+                        <option value="Manager">Umsjónarmaður</option>
+                        <option value="Admin">Stjórnandi</option>
+                      </select>
+                      <p class="mt-1 text-xs text-gray-500">Ef ekkert er valið verður notandi búinn til með "Notandi" hlutverk</p>
                     </div>
                     <div v-if="createError" class="rounded-md bg-red-50 p-3">
                       <p class="text-sm text-red-800">{{ createError }}</p>
@@ -235,6 +276,88 @@
       </div>
     </div>
 
+    <!-- Role Management Modal -->
+    <div v-if="showRoleModal && managingUser" class="fixed z-50 inset-0 overflow-y-auto" @click.self="showRoleModal = false">
+      <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showRoleModal = false"></div>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div class="sm:flex sm:items-start">
+              <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                  Stjórna hlutverkum - {{ managingUser.name }}
+                </h3>
+                
+                <div class="space-y-4">
+                  <div>
+                    <p class="text-sm text-gray-600 mb-3">Núverandi hlutverk:</p>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                      <span
+                        v-for="role in managingUser.roles"
+                        :key="role"
+                        :class="getRoleBadgeClass(role)"
+                        class="px-3 py-1 inline-flex items-center text-sm font-semibold rounded-full"
+                      >
+                        {{ getRoleLabel(role) }}
+                        <button
+                          @click="handleRemoveRole(role)"
+                          :disabled="isManagingRole"
+                          class="ml-2 hover:text-red-600 focus:outline-none disabled:opacity-50"
+                          type="button"
+                          title="Fjarlægja hlutverk"
+                        >
+                          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                      </span>
+                      <span v-if="!managingUser.roles || managingUser.roles.length === 0" class="text-sm text-gray-400 italic">
+                        Ekkert hlutverk úthlutað
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                      Bæta við hlutverki:
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        v-for="role in availableRolesToAdd"
+                        :key="role"
+                        @click="handleAssignRole(role)"
+                        :disabled="isManagingRole"
+                        type="button"
+                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        + {{ getRoleLabel(role) }}
+                      </button>
+                      <p v-if="availableRolesToAdd.length === 0" class="text-sm text-gray-500 italic">
+                        Öll hlutverk eru þegar úthlutað
+                      </p>
+                    </div>
+                  </div>
+
+                  <div v-if="roleError" class="rounded-md bg-red-50 p-3">
+                    <p class="text-sm text-red-800">{{ roleError }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              @click="closeRoleModal"
+              class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm"
+            >
+              Loka
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Delete Confirmation Modal -->
     <div v-if="showDeleteModal && deletingUser" class="fixed z-50 inset-0 overflow-y-auto" @click.self="showDeleteModal = false">
       <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -283,7 +406,7 @@
 import type { User } from '~/types/user'
 
 const { getAllUsers, updateUser, deleteUser } = useUsers()
-const { createUser } = useAuth()
+const { createUser, assignRole, removeRole, getAvailableRoles } = useAuth()
 
 const users = ref<User[]>([])
 const isLoading = ref(false)
@@ -295,7 +418,8 @@ const isCreating = ref(false)
 const createError = ref('')
 const createForm = ref({
   username: '',
-  name: ''
+  name: '',
+  role: ''
 })
 
 // Edit modal
@@ -311,6 +435,19 @@ const editForm = ref({
 const showDeleteModal = ref(false)
 const isDeleting = ref(false)
 const deletingUser = ref<User | null>(null)
+
+// Role management modal
+const showRoleModal = ref(false)
+const isManagingRole = ref(false)
+const roleError = ref('')
+const managingUser = ref<User | null>(null)
+const allRoles = ref<string[]>([])
+
+const availableRolesToAdd = computed(() => {
+  if (!managingUser.value || !allRoles.value) return []
+  const userRoles = managingUser.value.roles || []
+  return allRoles.value.filter(role => !userRoles.includes(role))
+})
 
 const loadUsers = async () => {
   isLoading.value = true
@@ -328,9 +465,9 @@ const handleCreateUser = async () => {
   isCreating.value = true
   createError.value = ''
   try {
-    await createUser(createForm.value.username, createForm.value.name)
+    await createUser(createForm.value.username, createForm.value.name, createForm.value.role || undefined)
     showCreateModal.value = false
-    createForm.value = { username: '', name: '' }
+    createForm.value = { username: '', name: '', role: '' }
     await loadUsers()
   } catch (error: any) {
     createError.value = error.data?.message || error.message || 'Mistókst að búa til notanda'
@@ -381,6 +518,87 @@ const handleDeleteUser = async () => {
   } finally {
     isDeleting.value = false
   }
+}
+
+const manageRoles = async (user: User) => {
+  managingUser.value = user
+  roleError.value = ''
+  showRoleModal.value = true
+  
+  // Load available roles if not already loaded
+  if (allRoles.value.length === 0) {
+    try {
+      allRoles.value = await getAvailableRoles()
+    } catch (error: any) {
+      roleError.value = 'Mistókst að hlaða hlutverkum'
+    }
+  }
+}
+
+const handleAssignRole = async (role: string) => {
+  if (!managingUser.value) return
+  
+  isManagingRole.value = true
+  roleError.value = ''
+  try {
+    const updatedUser = await assignRole(managingUser.value.id, role)
+    // Update the user in the list
+    const userIndex = users.value.findIndex(u => u.id === updatedUser.id)
+    if (userIndex !== -1) {
+      users.value[userIndex] = updatedUser
+    }
+    // Update the managing user
+    managingUser.value = updatedUser
+  } catch (error: any) {
+    roleError.value = error.data?.message || error.message || 'Mistókst að úthluta hlutverki'
+  } finally {
+    isManagingRole.value = false
+  }
+}
+
+const handleRemoveRole = async (role: string) => {
+  if (!managingUser.value) return
+  
+  isManagingRole.value = true
+  roleError.value = ''
+  try {
+    const updatedUser = await removeRole(managingUser.value.id, role)
+    // Update the user in the list
+    const userIndex = users.value.findIndex(u => u.id === updatedUser.id)
+    if (userIndex !== -1) {
+      users.value[userIndex] = updatedUser
+    }
+    // Update the managing user
+    managingUser.value = updatedUser
+  } catch (error: any) {
+    roleError.value = error.data?.message || error.message || 'Mistókst að fjarlægja hlutverk'
+  } finally {
+    isManagingRole.value = false
+  }
+}
+
+const closeRoleModal = () => {
+  showRoleModal.value = false
+  managingUser.value = null
+  roleError.value = ''
+}
+
+const getRoleLabel = (role: string): string => {
+  const labels: Record<string, string> = {
+    'Admin': 'Stjórnandi',
+    'Manager': 'Umsjónarmaður',
+    'User': 'Notandi'
+  }
+  return labels[role] || role
+}
+
+const getRoleBadgeClass = (role: string): string => {
+  const classes: Record<string, string> = {
+    'Admin': 'bg-red-100 text-red-800',
+    'Manager': 'bg-purple-100 text-purple-800',
+    'User': 'bg-blue-100 text-blue-800'
+  }
+  return classes[role] || 'bg-gray-100 text-gray-800'
 }
 
 const formatDate = (dateString: string) => {

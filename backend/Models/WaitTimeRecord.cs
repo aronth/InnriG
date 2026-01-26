@@ -7,7 +7,9 @@ public class WaitTimeRecord
     public Guid Id { get; set; }
     
     [Required]
-    public Restaurant Restaurant { get; set; }
+    public Guid RestaurantId { get; set; }
+    
+    public Restaurant Restaurant { get; set; } = null!;
     
     public int? SottMinutes { get; set; }
     

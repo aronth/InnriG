@@ -2,6 +2,7 @@ using InnriGreifi.API.Data;
 using InnriGreifi.API.Models;
 using InnriGreifi.API.Models.DTOs;
 using InnriGreifi.API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,7 @@ namespace InnriGreifi.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
 public class InvoicesController : ControllerBase
 {
     private readonly IInvoiceParser _parser;

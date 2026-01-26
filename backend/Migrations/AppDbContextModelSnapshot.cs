@@ -64,6 +64,506 @@ namespace InnriGreifi.API.Migrations
                     b.ToTable("Buyers");
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GraphAttachmentId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsInline")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.ToTable("EmailAttachments");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailClassificationQueue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("QueuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.HasIndex("QueuedAt");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("EmailClassificationQueues");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FromEmail")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("FromName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("GraphConversationId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("GraphThreadId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("LastMessageId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("LastMessageReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MessageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedToUserId");
+
+                    b.HasIndex("GraphConversationId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("WorkflowInstanceId");
+
+                    b.ToTable("EmailConversations");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailExtractedData", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AdultCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ChildCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExtractedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExtractedJson")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("GuestCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LocationCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RequestedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeSpan?>("RequestedTime")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("SpecialRequests")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId")
+                        .IsUnique();
+
+                    b.HasIndex("MessageId");
+
+                    b.ToTable("EmailExtractedData");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AISummary")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("AttachmentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Bcc")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Cc")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Flag")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("FromEmail")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("FromName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("GraphConversationId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("GraphMessageId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("HasAttachments")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Importance")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("InReplyToId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsAIResponse")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOutgoing")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSentFromSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MessageBody")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReceivedDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SentByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SentDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ToEmail")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ToName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("GraphConversationId");
+
+                    b.HasIndex("GraphMessageId")
+                        .IsUnique();
+
+                    b.HasIndex("SentByUserId");
+
+                    b.ToTable("EmailMessages");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DkNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ExpirationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("PrintWithBackground")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RedeemedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RestaurantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SoldAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("Number")
+                        .IsUnique();
+
+                    b.HasIndex("RestaurantId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("GiftCards");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCardNumberSequence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("NextNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumberLength")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GiftCardNumberSequences");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCardTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AmountAsText")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DefaultAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMonetaryTemplate")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MessageTemplate")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RestaurantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestaurantId");
+
+                    b.ToTable("GiftCardTemplates");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -173,6 +673,146 @@ namespace InnriGreifi.API.Migrations
                     b.ToTable("InvoiceItems");
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.OrderImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OrderImportBatches");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.OrderRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("CashRegisterNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CheckedOutAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("CreatedOnRegister")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Debtor")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool?>("Deleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("DeliveryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeliveryMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("InvoiceNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InvoiceText3Raw")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("OrderDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrderImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OrderNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OrderSource")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<TimeOnly?>("OrderTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("OrderType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<TimeOnly?>("ReadyTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<Guid?>("RestaurantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Salesman")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SourceRowNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("TotalAmountWithVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("WaitTimeMin")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedDate");
+
+                    b.HasIndex("OrderImportBatchId");
+
+                    b.HasIndex("OrderNumber");
+
+                    b.HasIndex("RestaurantId");
+
+                    b.ToTable("OrderRows");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.Product", b =>
                 {
                     b.Property<Guid>("Id")
@@ -212,6 +852,39 @@ namespace InnriGreifi.API.Migrations
                         .IsUnique();
 
                     b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.Restaurant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Restaurants");
                 });
 
             modelBuilder.Entity("InnriGreifi.API.Models.Supplier", b =>
@@ -270,6 +943,10 @@ namespace InnriGreifi.API.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("EmailSignature")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
@@ -325,6 +1002,43 @@ namespace InnriGreifi.API.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.UserEmailMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("EmailAddress")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "EmailAddress")
+                        .IsUnique();
+
+                    b.ToTable("UserEmailMappings");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeNotification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -348,8 +1062,8 @@ namespace InnriGreifi.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int>("Restaurant")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("RestaurantId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("SentThresholdMinutes")
                         .HasColumnType("integer");
@@ -365,7 +1079,9 @@ namespace InnriGreifi.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Restaurant")
+                    b.HasIndex("RestaurantId");
+
+                    b.HasIndex("UserId", "RestaurantId")
                         .IsUnique();
 
                     b.ToTable("WaitTimeNotifications");
@@ -380,8 +1096,8 @@ namespace InnriGreifi.API.Migrations
                     b.Property<bool>("IsClosed")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("Restaurant")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("RestaurantId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("ScrapedAt")
                         .HasColumnType("timestamp with time zone");
@@ -394,7 +1110,134 @@ namespace InnriGreifi.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RestaurantId");
+
                     b.ToTable("WaitTimeRecords");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovalDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("StepExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("WorkflowInstanceId");
+
+                    b.ToTable("WorkflowApprovals");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowInstance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentStepIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkflowDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WorkflowType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId")
+                        .IsUnique();
+
+                    b.HasIndex("State");
+
+                    b.HasIndex("WorkflowType");
+
+                    b.ToTable("WorkflowInstances");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowStepExecution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("StepType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("WorkflowInstanceId");
+
+                    b.ToTable("WorkflowStepExecutions");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -527,6 +1370,118 @@ namespace InnriGreifi.API.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailAttachment", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.EmailMessage", "Message")
+                        .WithMany("Attachments")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailClassificationQueue", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.EmailMessage", "Message")
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailConversation", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.User", "AssignedTo")
+                        .WithMany()
+                        .HasForeignKey("AssignedToUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InnriGreifi.API.Models.WorkflowInstance", "WorkflowInstance")
+                        .WithMany()
+                        .HasForeignKey("WorkflowInstanceId");
+
+                    b.Navigation("AssignedTo");
+
+                    b.Navigation("WorkflowInstance");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailExtractedData", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.EmailConversation", "Conversation")
+                        .WithOne("ExtractedData")
+                        .HasForeignKey("InnriGreifi.API.Models.EmailExtractedData", "ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InnriGreifi.API.Models.EmailMessage", "Message")
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailMessage", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.EmailConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InnriGreifi.API.Models.User", "SentBy")
+                        .WithMany()
+                        .HasForeignKey("SentByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("SentBy");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCard", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InnriGreifi.API.Models.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InnriGreifi.API.Models.GiftCardTemplate", "Template")
+                        .WithMany("GiftCards")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InnriGreifi.API.Models.User", null)
+                        .WithMany("GiftCards")
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Restaurant");
+
+                    b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCardTemplate", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Restaurant");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>
                 {
                     b.HasOne("InnriGreifi.API.Models.Buyer", "Buyer")
@@ -564,6 +1519,24 @@ namespace InnriGreifi.API.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.OrderRow", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.OrderImportBatch", "OrderImportBatch")
+                        .WithMany("Rows")
+                        .HasForeignKey("OrderImportBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InnriGreifi.API.Models.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("OrderImportBatch");
+
+                    b.Navigation("Restaurant");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.Product", b =>
                 {
                     b.HasOne("InnriGreifi.API.Models.Supplier", "Supplier")
@@ -575,15 +1548,85 @@ namespace InnriGreifi.API.Migrations
                     b.Navigation("Supplier");
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.UserEmailMapping", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeNotification", b =>
                 {
+                    b.HasOne("InnriGreifi.API.Models.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("InnriGreifi.API.Models.User", "User")
                         .WithMany("WaitTimeNotifications")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Restaurant");
+
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WaitTimeRecord", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restaurant");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowApproval", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.User", "ApprovedBy")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InnriGreifi.API.Models.WorkflowInstance", "WorkflowInstance")
+                        .WithMany("Approvals")
+                        .HasForeignKey("WorkflowInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedBy");
+
+                    b.Navigation("WorkflowInstance");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowInstance", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.EmailConversation", "Conversation")
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowStepExecution", b =>
+                {
+                    b.HasOne("InnriGreifi.API.Models.WorkflowInstance", "WorkflowInstance")
+                        .WithMany("StepExecutions")
+                        .HasForeignKey("WorkflowInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WorkflowInstance");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -642,9 +1685,31 @@ namespace InnriGreifi.API.Migrations
                     b.Navigation("Invoices");
                 });
 
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailConversation", b =>
+                {
+                    b.Navigation("ExtractedData");
+
+                    b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.EmailMessage", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.GiftCardTemplate", b =>
+                {
+                    b.Navigation("GiftCards");
+                });
+
             modelBuilder.Entity("InnriGreifi.API.Models.Invoice", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.OrderImportBatch", b =>
+                {
+                    b.Navigation("Rows");
                 });
 
             modelBuilder.Entity("InnriGreifi.API.Models.Product", b =>
@@ -661,7 +1726,16 @@ namespace InnriGreifi.API.Migrations
 
             modelBuilder.Entity("InnriGreifi.API.Models.User", b =>
                 {
+                    b.Navigation("GiftCards");
+
                     b.Navigation("WaitTimeNotifications");
+                });
+
+            modelBuilder.Entity("InnriGreifi.API.Models.WorkflowInstance", b =>
+                {
+                    b.Navigation("Approvals");
+
+                    b.Navigation("StepExecutions");
                 });
 #pragma warning restore 612, 618
         }

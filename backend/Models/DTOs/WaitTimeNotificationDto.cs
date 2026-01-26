@@ -6,8 +6,8 @@ public class WaitTimeNotificationDto
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public Restaurant Restaurant { get; set; }
-    public string RestaurantName => Restaurant.ToString();
+    public Restaurant Restaurant { get; set; } = null!;
+    public string RestaurantName => Restaurant?.Name ?? "Unknown";
     public int? SottThresholdMinutes { get; set; }
     public int? SentThresholdMinutes { get; set; }
     public bool IsEnabled { get; set; }
@@ -19,7 +19,7 @@ public class WaitTimeNotificationDto
 
 public class CreateWaitTimeNotificationDto
 {
-    public Restaurant Restaurant { get; set; }
+    public Guid RestaurantId { get; set; }
     public string PushoverUserKey { get; set; } = string.Empty;
     public int? SottThresholdMinutes { get; set; }
     public int? SentThresholdMinutes { get; set; }

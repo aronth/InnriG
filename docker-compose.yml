@@ -30,6 +30,14 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=${POSTGRES_DB:-innrigreifi};Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-password}
       - Cors__Origins=${CORS_ORIGINS:-http://localhost:3000,http://localhost:80,http://localhost:443}
+      - Email__SharedInboxEmail=${EMAIL_SHARED_INBOX_EMAIL:-}
+      - Email__TenantId=${EMAIL_TENANT_ID:-}
+      - Email__ClientId=${EMAIL_CLIENT_ID:-}
+      - Email__ClientSecret=${EMAIL_CLIENT_SECRET:-}
+      - Email__PollIntervalMinutes=${EMAIL_POLL_INTERVAL_MINUTES:-1}
+      - Email__MaxContextMessages=${EMAIL_MAX_CONTEXT_MESSAGES:-10}
+      - OpenAI__ApiKey=${OPENAI_API_KEY:-}
+      - OpenAI__Model=${OPENAI_MODEL:-gpt-5}
     networks:
       - innrig-network
     depends_on:
