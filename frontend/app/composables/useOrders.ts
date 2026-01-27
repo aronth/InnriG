@@ -253,7 +253,11 @@ export const useOrders = () => {
   const apiBase = config.public.apiBase
   const { apiFetch } = useApi()
 
-  const uploadOrders = async (file: File, restaurantId?: string | null): Promise<OrderImportResultDto> => {
+  const uploadOrders = async (
+    file: File, 
+    restaurantId?: string | null,
+    onProgress?: (progress: number) => void
+  ): Promise<OrderImportResultDto> => {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -262,9 +266,62 @@ export const useOrders = () => {
       url.searchParams.set('restaurantId', restaurantId)
     }
 
-    return await apiFetch<OrderImportResultDto>(url.toString(), {
-      method: 'POST',
-      body: formData
+    // Use XMLHttpRequest for upload progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+
+      // Track upload progress
+      if (onProgress) {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100
+            onProgress(percentComplete)
+          }
+        })
+      }
+
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText) as OrderImportResultDto
+            resolve(response)
+          } catch (e) {
+            reject(new Error('Invalid response format'))
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText)
+            reject(new Error(error.message || `Upload failed with status ${xhr.status}`))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      })
+
+      // Handle errors
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error during upload'))
+      })
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Upload was aborted'))
+      })
+
+      // Set up request with credentials (cookies)
+      xhr.open('POST', url.toString())
+      xhr.withCredentials = true
+      
+      // Set a longer timeout for large file uploads (30 minutes)
+      xhr.timeout = 30 * 60 * 1000
+
+      // Handle timeout
+      xhr.addEventListener('timeout', () => {
+        reject(new Error('Upload request timed out'))
+      })
+
+      // Send request
+      xhr.send(formData)
     })
   }
 

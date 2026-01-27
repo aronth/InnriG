@@ -40,7 +40,42 @@
             </option>
           </select>
         </div>
-        <ExcelDropzone :disabled="!selectedRestaurantId" @file-selected="onFileSelected" />
+        <ExcelDropzone :disabled="!selectedRestaurantId || isUploading" @file-selected="onFileSelected" />
+
+        <!-- Upload Progress -->
+        <div v-if="isUploading" class="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="flex-shrink-0">
+              <svg class="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-lg font-bold text-indigo-900">{{ uploadStatus }}</h3>
+              <p class="text-sm text-indigo-700 mt-1">{{ uploadStatusMessage }}</p>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="w-full bg-indigo-200 rounded-full h-3 overflow-hidden relative">
+            <div
+              v-if="uploadProgress >= 0"
+              class="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
+              :style="{ width: `${uploadProgress}%` }"
+            ></div>
+            <div
+              v-else
+              class="h-full rounded-full relative overflow-hidden"
+            >
+              <div class="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-full indeterminate-progress"></div>
+            </div>
+          </div>
+
+          <div v-if="uploadProgress >= 0" class="mt-2 text-xs text-indigo-600 text-right">
+            {{ Math.round(uploadProgress) }}%
+          </div>
+        </div>
 
         <div v-if="uploadError" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           {{ uploadError }}
@@ -116,6 +151,10 @@ const lastResult = ref<OrderImportResultDto | null>(null)
 const restaurants = ref<Restaurant[]>([])
 const selectedRestaurantId = ref<string | null>(null)
 const isLoading = ref(false)
+const isUploading = ref(false)
+const uploadProgress = ref<number>(-1) // -1 means indeterminate, 0-100 means actual progress
+const uploadStatus = ref<string>('Hleður upp skrá...')
+const uploadStatusMessage = ref<string>('')
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '-'
@@ -142,14 +181,35 @@ const onFileSelected = async (file: File) => {
 
   uploadError.value = null
   lastResult.value = null
+  isUploading.value = true
+  uploadProgress.value = 0
+  uploadStatus.value = 'Hleður upp skrá...'
+  uploadStatusMessage.value = `Skrá: ${file.name}`
 
-  isLoading.value = true
   try {
-    lastResult.value = await uploadOrders(file, selectedRestaurantId.value)
+    lastResult.value = await uploadOrders(
+      file, 
+      selectedRestaurantId.value,
+      (progress) => {
+        uploadProgress.value = progress
+        if (progress >= 100) {
+          uploadStatus.value = 'Vinnur úr skrá...'
+          uploadStatusMessage.value = 'Les inn gögn úr Excel skrá og setur í gagnagrunn'
+          uploadProgress.value = -1 // Switch to indeterminate mode
+        }
+      }
+    )
+    
+    // Show completion briefly before showing results
+    uploadStatus.value = 'Innlestri lokið!'
+    uploadStatusMessage.value = 'Skráin hefur verið lesin inn'
+    await new Promise(resolve => setTimeout(resolve, 500))
   } catch (e: any) {
-    uploadError.value = e?.data || e?.message || 'Villa kom upp við að hlaða upp skjali.'
+    uploadError.value = e?.message || e?.data || 'Villa kom upp við að hlaða upp skjali.'
+    uploadProgress.value = -1
   } finally {
-    isLoading.value = false
+    isUploading.value = false
+    uploadProgress.value = -1
   }
 }
 
@@ -157,4 +217,21 @@ onMounted(async () => {
   await loadRestaurants()
 })
 </script>
+
+<style scoped>
+.indeterminate-progress {
+  width: 100%;
+  background-size: 200% 100%;
+  animation: indeterminate-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes indeterminate-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+</style>
 

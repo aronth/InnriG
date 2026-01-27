@@ -58,11 +58,16 @@ public class OrderImportService : IOrderImportService
         // Column mapping: support rearranged columns by using header row values.
         var headerMap = BuildHeaderMap(worksheet, warnings);
 
+        _logger.LogInformation("Starting import of {FileName}. Total rows to process: {TotalRows}", 
+            file.FileName, totalRowsInSheet);
+
         // Disable change tracking for better performance during bulk inserts
         _context.ChangeTracker.AutoDetectChangesEnabled = false;
 
         const int batchSize = 1000; // Save in chunks of 1000 rows
         var rowsToSave = new List<OrderRow>(batchSize);
+        var lastLogTime = DateTime.UtcNow;
+        const int logIntervalSeconds = 10; // Log progress every 10 seconds
 
         try
         {
@@ -126,6 +131,16 @@ public class OrderImportService : IOrderImportService
                     rowsToSave.Add(entity);
                     imported++;
 
+                    // Log progress periodically to help diagnose timeout issues
+                    var now = DateTime.UtcNow;
+                    if ((now - lastLogTime).TotalSeconds >= logIntervalSeconds)
+                    {
+                        var progress = (double)(r - 1) / totalRowsInSheet * 100;
+                        _logger.LogInformation("Import progress: {CurrentRow}/{TotalRows} ({Progress:F1}%) - Imported: {Imported}, Skipped: {Skipped}", 
+                            r - 1, totalRowsInSheet, progress, imported, skipped);
+                        lastLogTime = now;
+                    }
+
                     // Save in batches to avoid memory issues and improve performance
                     if (rowsToSave.Count >= batchSize)
                     {
@@ -133,6 +148,9 @@ public class OrderImportService : IOrderImportService
                         await _context.SaveChangesAsync(cancellationToken);
                         _context.ChangeTracker.Clear(); // Clear tracking to free memory
                         rowsToSave.Clear();
+                        
+                        _logger.LogDebug("Saved batch of {BatchSize} rows. Total imported so far: {Imported}", 
+                            batchSize, imported);
                     }
                 }
                 catch (Exception ex)
@@ -154,6 +172,9 @@ public class OrderImportService : IOrderImportService
             batch.RowCount = imported;
             _context.OrderImportBatches.Update(batch);
             await _context.SaveChangesAsync(cancellationToken);
+            
+            _logger.LogInformation("Import completed for {FileName}. Imported: {Imported}, Skipped: {Skipped}, Warnings: {WarningCount}", 
+                file.FileName, imported, skipped, warnings.Count);
         }
         finally
         {

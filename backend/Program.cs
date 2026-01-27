@@ -6,6 +6,17 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel server options for long-running requests (file uploads/processing)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    // Set request timeout to 30 minutes (1800 seconds) for large file uploads
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
+    
+    // Increase max request body size if needed (default is 30MB)
+    // options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100MB
+});
+
 // Add services to the container.
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
