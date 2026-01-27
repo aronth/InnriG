@@ -19,6 +19,7 @@ export const useApi = () => {
                 ...options,
                 headers,
                 credentials: 'include', // Always include cookies
+                timeout: 30 * 60 * 1000, // 30 minutes timeout for long-running requests (file uploads)
             })
             return response
         } catch (error: any) {

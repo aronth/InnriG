@@ -16,11 +16,48 @@ The backend has been configured with:
 - **Kestrel timeout**: 30 minutes (configured in `Program.cs` and `appsettings.json`)
 - **Progress logging**: Added to `OrderImportService` to track import progress
 
-### 2. Nginx Proxy Manager Configuration
+### 2. Frontend/Client Configuration
 
-You need to configure nginx-proxy-manager to allow longer request timeouts. Follow these steps:
+If the API is accessed **directly through Docker network** (not through nginx-proxy-manager), the timeout might be coming from:
 
-#### Option A: Via Nginx Proxy Manager UI (Recommended)
+#### A. Browser/Client-Side Timeout
+The upload function already uses `XMLHttpRequest` with a 30-minute timeout, which should handle browser timeouts.
+
+#### B. Nuxt SSR Timeout (Server-Side Rendering)
+If Nuxt is making server-side API calls, you may need to configure `$fetch` timeout in `nuxt.config.ts`:
+
+```typescript
+export default defineNuxtConfig({
+  // ... existing config
+  nitro: {
+    routeRules: {
+      '/api/**': {
+        proxy: {
+          to: process.env.API_BASE_URL || 'http://backend:8080',
+          timeout: 1800000 // 30 minutes in milliseconds
+        }
+      }
+    }
+  }
+})
+```
+
+Or configure `$fetch` timeout globally in `useApi.ts`:
+
+```typescript
+const response = await $fetch<T>(fullUrl, {
+  ...options,
+  headers,
+  credentials: 'include',
+  timeout: 30 * 60 * 1000 // 30 minutes
+})
+```
+
+### 3. Nginx Proxy Manager Configuration (If Using)
+
+If you ARE using nginx-proxy-manager in front of your API, you need to configure it to allow longer request timeouts. Follow these steps:
+
+#### Option A: Via Nginx Proxy Manager UI (If Using NPM)
 
 1. Log into Nginx Proxy Manager (usually at `http://your-server:81`)
 2. Go to **Proxy Hosts** → Select your backend proxy host
