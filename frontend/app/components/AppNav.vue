@@ -16,14 +16,6 @@
 
           <!-- Desktop Navigation -->
           <div class="hidden sm:flex sm:space-x-1">
-            <NuxtLink 
-              to="/products" 
-              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200"
-              :class="[$route.path === '/products' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900']"
-            >
-              Stjórnborð
-            </NuxtLink>
-            
             <!-- Bookings - Available to all authenticated users (User, Manager, Admin) -->
             <NuxtLink 
               v-if="canAccessBookings"
@@ -68,6 +60,14 @@
               :class="[$route.path.startsWith('/orders') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900']"
             >
               Pantanir
+            </NuxtLink>
+            <NuxtLink 
+              v-if="canAccessAdmin"
+              to="/timaskyrsla" 
+              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200"
+              :class="[$route.path.startsWith('/timaskyrsla') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900']"
+            >
+              Tímaskýrsla
             </NuxtLink>
             <NuxtLink 
               v-if="canAccessAdmin"
