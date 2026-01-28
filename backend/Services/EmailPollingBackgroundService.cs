@@ -55,6 +55,7 @@ public class EmailPollingBackgroundService : IHostedService, IDisposable
             var graphService = scope.ServiceProvider.GetRequiredService<IGraphEmailService>();
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var queueService = scope.ServiceProvider.GetRequiredService<IEmailClassificationQueueService>();
+            var junkFilterService = scope.ServiceProvider.GetRequiredService<IEmailJunkFilterService>();
 
             // Determine since when to poll
             DateTime? since = _lastPollTime;
@@ -94,6 +95,15 @@ public class EmailPollingBackgroundService : IHostedService, IDisposable
                     if (existingMessage != null)
                     {
                         _logger.LogDebug("Message {MessageId} already exists, skipping", graphMsg.Id);
+                        continue;
+                    }
+
+                    // Check if email matches junk filter
+                    var isJunk = await junkFilterService.IsJunkEmailAsync(graphMsg.Subject, graphMsg.FromEmail);
+                    if (isJunk)
+                    {
+                        _logger.LogInformation("Message {MessageId} from {FromEmail} with subject '{Subject}' matched junk filter, skipping", 
+                            graphMsg.Id, graphMsg.FromEmail, graphMsg.Subject);
                         continue;
                     }
 

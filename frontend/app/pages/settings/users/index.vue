@@ -1,133 +1,167 @@
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Notendastjórnun</h1>
-        <p class="mt-1 text-sm text-gray-500">Stjórna notendum kerfisins</p>
-      </div>
-      <button
-        @click="showCreateModal = true"
-        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-      >
-        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        Búa til notanda
-      </button>
-    </div>
-
-    <!-- Users Table -->
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-      <div v-if="isLoading" class="p-8 text-center">
-        <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p class="mt-2 text-sm text-gray-500">Hleður notendum...</p>
+  <div class="min-h-screen py-8">
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Notendastjórnun</h1>
+        <p class="mt-2 text-sm text-gray-600">Stjórnaðu notendum kerfisins</p>
       </div>
 
-      <div v-else-if="errorMsg" class="p-4 bg-red-50 border-l-4 border-red-400">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+      <!-- Navigation Tabs -->
+      <div class="mb-6 border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8">
+          <NuxtLink
+            to="/settings"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Persónulegar stillingar
+          </NuxtLink>
+          <NuxtLink
+            to="/settings/system"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings/system' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Kerfisstillingar
+          </NuxtLink>
+          <NuxtLink
+            to="/settings/users"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings/users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Notendur
+          </NuxtLink>
+        </nav>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="flex justify-between items-center">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">Notendalisti</h2>
+          </div>
+          <button
+            @click="showCreateModal = true"
+            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
+            Búa til notanda
+          </button>
+        </div>
+
+        <!-- Users Table -->
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+          <div v-if="isLoading" class="p-8 text-center">
+            <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">Hleður notendum...</p>
           </div>
-          <div class="ml-3">
-            <p class="text-sm text-red-800">{{ errorMsg }}</p>
+
+          <div v-else-if="errorMsg" class="p-4 bg-red-50 border-l-4 border-red-400">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <p class="text-sm text-red-800">{{ errorMsg }}</p>
+              </div>
+            </div>
           </div>
+
+          <table v-else class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Notandanafn
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nafn
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Hlutverk
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stöða
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stofnað
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Aðgerðir
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="user in users" :key="user.id">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {{ user.username }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {{ user.name }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="role in user.roles"
+                      :key="role"
+                      :class="getRoleBadgeClass(role)"
+                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                    >
+                      {{ getRoleLabel(role) }}
+                    </span>
+                    <span v-if="!user.roles || user.roles.length === 0" class="text-xs text-gray-400 italic">
+                      Ekkert hlutverk
+                    </span>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span
+                    v-if="user.mustChangePassword"
+                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800"
+                  >
+                    Verður að breyta lykilorði
+                  </span>
+                  <span
+                    v-else
+                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"
+                  >
+                    Virkur
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {{ formatDate(user.createdAt) }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button
+                    @click="manageRoles(user)"
+                    class="text-purple-600 hover:text-purple-900 mr-4"
+                    title="Stjórna hlutverkum"
+                  >
+                    Hlutverk
+                  </button>
+                  <button
+                    @click="editUser(user)"
+                    class="text-indigo-600 hover:text-indigo-900 mr-4"
+                  >
+                    Breyta
+                  </button>
+                  <button
+                    @click="confirmDelete(user)"
+                    class="text-red-600 hover:text-red-900"
+                  >
+                    Eyða
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <table v-else class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Notandanafn
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Nafn
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Hlutverk
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Stöða
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Stofnað
-            </th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Aðgerðir
-            </th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="user in users" :key="user.id">
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-              {{ user.username }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ user.name }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-              <div class="flex flex-wrap gap-1">
-                <span
-                  v-for="role in user.roles"
-                  :key="role"
-                  :class="getRoleBadgeClass(role)"
-                  class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                >
-                  {{ getRoleLabel(role) }}
-                </span>
-                <span v-if="!user.roles || user.roles.length === 0" class="text-xs text-gray-400 italic">
-                  Ekkert hlutverk
-                </span>
-              </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-              <span
-                v-if="user.mustChangePassword"
-                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800"
-              >
-                Verður að breyta lykilorði
-              </span>
-              <span
-                v-else
-                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"
-              >
-                Virkur
-              </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ formatDate(user.createdAt) }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-              <button
-                @click="manageRoles(user)"
-                class="text-purple-600 hover:text-purple-900 mr-4"
-                title="Stjórna hlutverkum"
-              >
-                Hlutverk
-              </button>
-              <button
-                @click="editUser(user)"
-                class="text-indigo-600 hover:text-indigo-900 mr-4"
-              >
-                Breyta
-              </button>
-              <button
-                @click="confirmDelete(user)"
-                class="text-red-600 hover:text-red-900"
-              >
-                Eyða
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
     <!-- Create User Modal -->
     <div v-if="showCreateModal" class="fixed z-50 inset-0 overflow-y-auto" @click.self="showCreateModal = false">

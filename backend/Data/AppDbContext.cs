@@ -31,6 +31,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
     public DbSet<WorkflowStepExecution> WorkflowStepExecutions { get; set; }
     public DbSet<WorkflowApproval> WorkflowApprovals { get; set; }
+    public DbSet<EmailJunkFilter> EmailJunkFilters { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -376,5 +377,12 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .WithMany()
             .HasForeignKey(wa => wa.ApprovedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // EmailJunkFilter Configuration
+        modelBuilder.Entity<EmailJunkFilter>()
+            .HasIndex(ejf => ejf.IsActive);
+
+        modelBuilder.Entity<EmailJunkFilter>()
+            .HasIndex(ejf => new { ejf.Subject, ejf.SenderEmail });
     }
 }

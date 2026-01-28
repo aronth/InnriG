@@ -140,6 +140,7 @@ public class EmailClassificationBackgroundService : IHostedService, IDisposable
         var queueService = scope.ServiceProvider.GetRequiredService<IEmailClassificationQueueService>();
         var classificationService = scope.ServiceProvider.GetRequiredService<IEmailClassificationService>();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var junkFilterService = scope.ServiceProvider.GetRequiredService<IEmailJunkFilterService>();
 
         // Find queue item
         var queueItem = await context.EmailClassificationQueues
@@ -159,6 +160,16 @@ public class EmailClassificationBackgroundService : IHostedService, IDisposable
         {
             _logger.LogWarning("Message {MessageId} not found", messageId);
             await queueService.MarkFailedAsync(queueItem.Id, "Message not found", false);
+            return;
+        }
+
+        // Check if email matches junk filter (double-check in case filter was added after queuing)
+        var isJunk = await junkFilterService.IsJunkEmailAsync(message.Subject, message.FromEmail, cancellationToken);
+        if (isJunk)
+        {
+            _logger.LogInformation("Message {MessageId} from {FromEmail} with subject '{Subject}' matched junk filter, marking as skipped", 
+                messageId, message.FromEmail, message.Subject);
+            await queueService.MarkFailedAsync(queueItem.Id, "Email matched junk filter", false);
             return;
         }
 

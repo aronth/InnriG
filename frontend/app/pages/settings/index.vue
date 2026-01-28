@@ -1,10 +1,39 @@
 <template>
   <div class="min-h-screen py-8">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="space-y-6">
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">Stillingar</h1>
         <p class="mt-2 text-sm text-gray-600">Stjórnaðu persónulegum upplýsingum og öryggisstillingum</p>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="mb-6 border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8">
+          <NuxtLink
+            to="/settings"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Persónulegar stillingar
+          </NuxtLink>
+          <NuxtLink
+            v-if="canAccessAdmin"
+            to="/settings/system"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings/system' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Kerfisstillingar
+          </NuxtLink>
+          <NuxtLink
+            v-if="canAccessAdmin"
+            to="/settings/users"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path === '/settings/users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Notendur
+          </NuxtLink>
+        </nav>
       </div>
 
       <!-- Profile Section -->
@@ -371,7 +400,7 @@
 <script setup lang="ts">
 import type { UserEmailMappingDto } from '~/types/userEmailSettings'
 
-const { currentUser, updateProfile, changePassword, getCurrentUser } = useAuth()
+const { currentUser, updateProfile, changePassword, getCurrentUser, canAccessAdmin } = useAuth()
 const { getEmailMappings, createEmailMapping, updateEmailMapping, deleteEmailMapping, getEmailSignature, updateEmailSignature } = useUserEmailSettings()
 
 const nameForm = ref({

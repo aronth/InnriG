@@ -144,6 +144,7 @@ builder.Services.AddScoped<OrderLateRules>();
 builder.Services.AddScoped<IGraphEmailService, GraphEmailService>();
 builder.Services.AddScoped<IEmailClassificationService, EmailClassificationService>();
 builder.Services.AddScoped<IEmailClassificationQueueService, EmailClassificationQueueService>();
+builder.Services.AddScoped<IEmailJunkFilterService, EmailJunkFilterService>();
 
 // Only register background services if email is configured
 if (EmailConfigurationHelper.IsEmailConfigured(builder.Configuration))
@@ -403,6 +404,47 @@ async Task SeedDatabaseAsync(WebApplication app)
         context.GiftCardNumberSequences.Add(sequence);
         await context.SaveChangesAsync();
         logger.LogInformation("Gift card number sequence seeded successfully");
+    }
+    
+    // Seed email junk filters
+    var sonyFilterExists = await context.EmailJunkFilters
+        .AnyAsync(f => f.Subject == "Password Change Notification" && f.SenderEmail == "sony@email03.account.sony.com");
+    
+    if (!sonyFilterExists)
+    {
+        logger.LogInformation("Seeding junk filter: Password Change Notification from sony@email03.account.sony.com...");
+        var sonyFilter = new EmailJunkFilter
+        {
+            Id = Guid.NewGuid(),
+            Subject = "Password Change Notification",
+            SenderEmail = "sony@email03.account.sony.com",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.EmailJunkFilters.Add(sonyFilter);
+        await context.SaveChangesAsync();
+        logger.LogInformation("Sony password change notification filter seeded successfully");
+    }
+    
+    var rapydFilterExists = await context.EmailJunkFilters
+        .AnyAsync(f => f.SenderEmail == "no-reply@rapyd.net" && f.Subject == null);
+    
+    if (!rapydFilterExists)
+    {
+        logger.LogInformation("Seeding junk filter: no-reply@rapyd.net...");
+        var rapydFilter = new EmailJunkFilter
+        {
+            Id = Guid.NewGuid(),
+            Subject = null,
+            SenderEmail = "no-reply@rapyd.net",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.EmailJunkFilters.Add(rapydFilter);
+        await context.SaveChangesAsync();
+        logger.LogInformation("Rapyd no-reply filter seeded successfully");
     }
     
     // Seed restaurants (using same GUIDs as migration for consistency)

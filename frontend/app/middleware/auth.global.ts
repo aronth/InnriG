@@ -34,7 +34,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     const isUser = hasRole('User') || isManager
     
     // Define route access rules
-    const adminOnlyRoutes = ['/products', '/orders', '/users', '/suppliers', '/buyers', '/kpis', '/waittimes']
+    const adminOnlyRoutes = ['/products', '/orders', '/settings/users', '/settings/system', '/suppliers', '/buyers', '/kpis', '/waittimes']
     const managerRoutes = ['/giftcards']
     const userRoutes = ['/bookings']
     
