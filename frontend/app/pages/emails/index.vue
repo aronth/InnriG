@@ -1,32 +1,9 @@
 <template>
-  <div class="h-[calc(100vh-8rem)] flex flex-col">
-    <!-- Access Warning Banner -->
-    <div 
-      v-if="!hasEmailAccess"
-      class="mb-4 px-4 py-3 bg-yellow-50 border-4 border-yellow-400 rounded-lg shadow-sm"
-    >
-      <div class="flex items-center gap-3">
-        <svg class="w-5 h-5 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <div>
-          <p class="text-sm font-semibold text-yellow-800">
-            Aðgangur ekki veittur
-          </p>
-          <p class="text-xs text-yellow-700 mt-0.5">
-            Þessi síða er ekki aðgengileg fyrr en Egill hefur veitt aðgang.
-          </p>
-        </div>
-      </div>
-    </div>
-    
+  <div class="h-[calc(100vh-4rem)] flex flex-col -my-6 -mx-4">
     <!-- Main Layout: Sidebar + Content + Workflow Sidebar -->
-    <div 
-      class="flex-1 flex gap-4 overflow-hidden"
-      :class="hasEmailAccess ? '' : 'border-4 border-yellow-400 border-dashed rounded-lg p-4 opacity-60 pointer-events-none'"
-    >
+    <div class="flex-1 flex gap-0 overflow-hidden">
       <!-- Sidebar: Conversation List -->
-      <div class="w-96 flex-shrink-0 bg-white rounded-lg shadow-md flex flex-col overflow-hidden">
+      <div class="w-96 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
         <!-- Sidebar Header with Filters -->
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
           <div class="flex items-center justify-between mb-2">
@@ -34,7 +11,7 @@
               Samtöl ({{ totalCount }})
             </div>
             <button
-              @click="loadConversations"
+              @click="handleFilterChange"
               class="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               title="Endurnýja"
             >
@@ -46,7 +23,7 @@
           <div class="flex gap-2">
             <select
               v-model="filters.status"
-              @change="loadConversations"
+              @change="handleFilterChange"
               class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Allar staður</option>
@@ -58,7 +35,7 @@
             </select>
             <select
               v-model="filters.classification"
-              @change="loadConversations"
+              @change="handleFilterChange"
               class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Allar flokkanir</option>
@@ -80,98 +57,93 @@
           </div>
         </div>
 
-        <!-- Conversation List -->
-        <div v-else class="flex-1 overflow-y-auto">
-          <div
-            v-for="conversation in conversations"
-            :key="conversation.id"
-            @click="selectConversation(conversation.id)"
-            :class="[
-              'px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors',
-              selectedConversationId === conversation.id
-                ? 'bg-indigo-50 border-l-4 border-l-indigo-500'
-                : 'hover:bg-gray-50'
-            ]"
-          >
-            <div class="flex items-start justify-between mb-1">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-semibold text-gray-900 truncate">
-                  {{ conversation.fromName || conversation.fromEmail }}
+        <!-- Conversation List with Virtual Scrolling -->
+        <div 
+          v-else 
+          ref="scrollContainerRef"
+          class="flex-1 overflow-y-auto"
+          @scroll="handleScroll"
+        >
+          <!-- Virtual scroll container -->
+          <div :style="{ height: `${totalHeight}px`, position: 'relative' }">
+            <div :style="{ transform: `translateY(${offsetY}px)` }">
+              <div
+                v-for="conversation in visibleConversations"
+                :key="conversation.id"
+                :data-index="conversation._index"
+                @click="selectConversation(conversation.id)"
+                :class="[
+                  'px-3 py-2 border-b border-gray-100 cursor-pointer transition-colors border-l-4',
+                  selectedConversationId === conversation.id
+                    ? 'bg-indigo-50'
+                    : 'hover:bg-gray-50',
+                  getStatusBorderColor(conversation.status)
+                ]"
+                :style="{ height: `${itemHeight}px` }"
+              >
+                <div class="flex items-start justify-between gap-2 mb-1">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-semibold text-gray-900 truncate">
+                      {{ conversation.fromName || conversation.fromEmail }}
+                    </div>
+                    <div class="text-xs text-gray-500 truncate">{{ conversation.fromEmail }}</div>
+                  </div>
+                  <div class="flex-shrink-0 text-right">
+                    <div class="text-xs text-gray-500 whitespace-nowrap">
+                      {{ formatShortDate24H(conversation.lastMessageReceivedAt) }}
+                    </div>
+                    <div v-if="conversation.messageCount > 1" class="text-xs text-gray-500 whitespace-nowrap">
+                      {{ conversation.messageCount }} skilaboð
+                    </div>
+                  </div>
                 </div>
-                <div class="text-xs text-gray-500 truncate">{{ conversation.fromEmail }}</div>
+                <div class="flex items-center gap-2">
+                  <div class="text-sm text-gray-900 font-medium truncate flex-1 min-w-0">
+                    {{ conversation.subject || '(Ekkert efni)' }}
+                  </div>
+                  <span
+                    v-if="conversation.classification"
+                    class="px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0"
+                    :class="getClassificationColor(conversation.classification)"
+                  >
+                    {{ getClassificationLabel(conversation.classification) }}
+                  </span>
+                </div>
               </div>
-              <div class="ml-2 flex-shrink-0 text-xs text-gray-500">
-                {{ formatShortDate(conversation.lastMessageReceivedAt) }}
-              </div>
-            </div>
-            <div class="text-sm text-gray-900 font-medium truncate mb-2">
-              {{ conversation.subject || '(Ekkert efni)' }}
-            </div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span
-                v-if="conversation.classification"
-                class="px-2 py-0.5 text-xs font-semibold rounded-full"
-                :class="getClassificationColor(conversation.classification)"
-              >
-                {{ getClassificationLabel(conversation.classification) }}
-              </span>
-              <span
-                class="px-2 py-0.5 text-xs font-semibold rounded-full"
-                :class="getStatusColor(conversation.status)"
-              >
-                {{ getStatusLabel(conversation.status) }}
-              </span>
-              <span v-if="conversation.messageCount > 1" class="text-xs text-gray-500">
-                {{ conversation.messageCount }} skilaboð
-              </span>
             </div>
           </div>
 
           <!-- Empty State -->
-          <div v-if="conversations.length === 0" class="text-center py-12 px-4">
+          <div v-if="conversations.length === 0 && !loading" class="text-center py-12 px-4">
             <p class="text-gray-500">Engin samtöl fundust</p>
           </div>
 
-          <!-- Pagination -->
-          <div v-if="totalPages > 1" class="px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <div class="flex items-center justify-between">
-              <div class="text-xs text-gray-700">
-                Síða {{ currentPage }} af {{ totalPages }}
-              </div>
-              <div class="flex gap-2">
-                <button
-                  @click="changePage(currentPage - 1)"
-                  :disabled="currentPage === 1"
-                  class="px-2 py-1 border border-gray-300 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                >
-                  ←
-                </button>
-                <button
-                  @click="changePage(currentPage + 1)"
-                  :disabled="currentPage === totalPages"
-                  class="px-2 py-1 border border-gray-300 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                >
-                  →
-                </button>
-              </div>
-            </div>
+          <!-- Loading more indicator -->
+          <div v-if="loadingMore" class="px-4 py-3 text-center">
+            <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+            <p class="text-xs text-gray-500 mt-1">Hleður fleiri...</p>
           </div>
         </div>
       </div>
 
       <!-- Main Content: Conversation View -->
-      <div class="flex-1 bg-white rounded-lg shadow-md flex flex-col overflow-hidden">
+      <div class="flex-1 bg-white flex flex-col overflow-hidden">
         <!-- Sticky Header -->
         <div
           v-if="selectedConversation"
-          class="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0"
+          class="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 flex-shrink-0"
         >
-          <div class="flex items-start justify-between w-full">
+          <div class="flex items-start justify-between w-full gap-4">
             <div class="flex-1 min-w-0">
-              <h2 class="text-xl font-bold text-gray-900 mb-1 truncate">
-                {{ selectedConversation.subject || '(Ekkert efni)' }}
-              </h2>
-              <div class="flex items-center gap-4 flex-wrap">
+              <div class="flex items-center gap-2 mb-1">
+                <h2 class="text-lg font-bold text-gray-900 truncate">
+                  {{ selectedConversation.subject || '(Ekkert efni)' }}
+                </h2>
+                <span class="text-sm text-gray-500 flex-shrink-0">
+                  ({{ selectedConversation.messageCount }})
+                </span>
+              </div>
+              <div class="flex items-center gap-3 flex-wrap">
                 <div class="text-sm text-gray-700">
                   <span class="font-medium">Frá:</span>
                   <span class="ml-1">{{ selectedConversation.fromName || selectedConversation.fromEmail }}</span>
@@ -180,31 +152,28 @@
                 <div class="text-sm text-gray-500">
                   {{ formatDate(selectedConversation.lastMessageReceivedAt) }}
                 </div>
-              </div>
-              <div class="flex items-center gap-2 mt-2 flex-wrap">
-                <span
-                  v-if="selectedConversation.classification"
-                  class="px-2 py-1 text-xs font-semibold rounded-full"
-                  :class="getClassificationColor(selectedConversation.classification)"
-                >
-                  {{ getClassificationLabel(selectedConversation.classification) }}
-                </span>
-                <span
-                  class="px-2 py-1 text-xs font-semibold rounded-full"
-                  :class="getStatusColor(selectedConversation.status)"
-                >
-                  {{ getStatusLabel(selectedConversation.status) }}
-                </span>
-                <span class="text-xs text-gray-500">
-                  {{ selectedConversation.messageCount }} skilaboð
-                </span>
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="selectedConversation.classification"
+                    class="px-2 py-0.5 text-xs font-semibold rounded-full"
+                    :class="getClassificationColor(selectedConversation.classification)"
+                  >
+                    {{ getClassificationLabel(selectedConversation.classification) }}
+                  </span>
+                  <span
+                    class="px-2 py-0.5 text-xs font-semibold rounded-full"
+                    :class="getStatusColor(selectedConversation.status)"
+                  >
+                    {{ getStatusLabel(selectedConversation.status) }}
+                  </span>
+                </div>
               </div>
             </div>
-            <div class="ml-4 flex gap-2 flex-shrink-0">
+            <div class="flex items-center gap-2 flex-shrink-0">
               <button
                 v-if="selectedConversation && !selectedConversation.messages?.some(m => m.isOutgoing)"
                 @click="showReplyModal = true"
-                class="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-2 text-sm"
+                class="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-1.5 text-sm"
                 title="Svara tölvupósti"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,102 +181,102 @@
                 </svg>
                 Svara
               </button>
-              <button
-                @click="refreshConversation"
-                :disabled="conversationLoading"
-                class="px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-                title="Endurnýja samtal"
-              >
-                <svg
-                  v-if="conversationLoading"
-                  class="animate-spin h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
+              <!-- Actions Dropdown -->
+              <div class="relative" ref="actionsDropdownRef">
+                <button
+                  @click="showActionsDropdown = !showActionsDropdown"
+                  class="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  title="Aðgerðir"
                 >
-                  <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                  ></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                <svg
-                  v-else
-                  class="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+                <div
+                  v-if="showActionsDropdown"
+                  class="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-20"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                Endurnýja
-              </button>
-              <button
-                @click="reparseConversation"
-                :disabled="reparsing"
-                class="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-              >
-                <svg
-                  v-if="reparsing"
-                  class="animate-spin h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                  ></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                <svg
-                  v-else
-                  class="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                {{ reparsing ? 'Endurflokkar...' : 'Endurflokka' }}
-              </button>
-              <select
-                v-model="selectedStatus"
-                @change="updateStatus"
-                class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              >
-                <option value="New">Ný</option>
-                <option value="InProgress">Í vinnslu</option>
-                <option value="AwaitingResponse">Bíður svars</option>
-                <option value="Resolved">Leyst</option>
-                <option value="Archived">Geymt</option>
-              </select>
+                  <div class="py-1">
+                    <button
+                      @click="refreshConversation; showActionsDropdown = false"
+                      :disabled="conversationLoading"
+                      class="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <svg
+                        v-if="conversationLoading"
+                        class="animate-spin h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <svg
+                        v-else
+                        class="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Endurnýja
+                    </button>
+                    <button
+                      @click="reparseConversation; showActionsDropdown = false"
+                      :disabled="reparsing"
+                      class="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <svg
+                        v-if="reparsing"
+                        class="animate-spin h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <svg
+                        v-else
+                        class="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {{ reparsing ? 'Endurflokkar...' : 'Endurflokka' }}
+                    </button>
+                    <div class="border-t border-gray-200 my-1"></div>
+                    <button
+                      @click="openJunkFilterModal(); showActionsDropdown = false"
+                      class="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Setja í ruslasíu
+                    </button>
+                    <div class="border-t border-gray-200 my-1"></div>
+                    <div class="px-4 py-2">
+                      <label class="block text-xs font-medium text-gray-700 mb-1">Staða</label>
+                      <select
+                        v-model="selectedStatus"
+                        @change="updateStatus; showActionsDropdown = false"
+                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="New">Ný</option>
+                        <option value="InProgress">Í vinnslu</option>
+                        <option value="AwaitingResponse">Bíður svars</option>
+                        <option value="Resolved">Leyst</option>
+                        <option value="Archived">Geymt</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -317,30 +286,88 @@
           <!-- AI Extracted Data -->
           <div
             v-if="selectedConversation.extractedData"
-            class="px-4 py-4 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 border-b-2 border-purple-300"
+            class="px-4 py-3 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 border-b-2 border-purple-300"
           >
-            <!-- AI Badge Header -->
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2">
-                <div class="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-full text-xs font-semibold">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span>Gervigreind</span>
+            <!-- Collapsed View -->
+            <div v-if="!aiSummaryExpanded" class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-1.5 px-2 py-0.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-full text-xs font-semibold">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span>AI</span>
+                  </div>
+                  <span
+                    class="px-2 py-0.5 text-xs font-semibold rounded-full"
+                    :class="getClassificationColor(selectedConversation.extractedData.classification)"
+                  >
+                    {{ getClassificationLabel(selectedConversation.extractedData.classification) }}
+                  </span>
                 </div>
-                <span class="text-sm font-semibold text-gray-800">Útdregin upplýsingar</span>
-              </div>
-              <!-- Confidence Score -->
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-600">Áreiðanleiki:</span>
-                <div
-                  class="px-2 py-1 rounded text-xs font-bold"
-                  :class="getConfidenceColor(selectedConversation.extractedData.confidence)"
-                >
-                  {{ (selectedConversation.extractedData.confidence * 100).toFixed(0) }}%
+                <div v-if="selectedConversation.extractedData.requestedDate" class="text-xs text-gray-700">
+                  <span class="font-medium">Dagsetning:</span>
+                  <span class="ml-1">{{ formatDateOnly(selectedConversation.extractedData.requestedDate) }}</span>
+                </div>
+                <div v-if="selectedConversation.extractedData.requestedTime" class="text-xs text-gray-700">
+                  <span class="font-medium">Tími:</span>
+                  <span class="ml-1">{{ formatTime(selectedConversation.extractedData.requestedTime) }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs text-gray-600">Áreiðanleiki:</span>
+                  <div
+                    class="px-2 py-0.5 rounded text-xs font-bold"
+                    :class="getConfidenceColor(selectedConversation.extractedData.confidence)"
+                  >
+                    {{ (selectedConversation.extractedData.confidence * 100).toFixed(0) }}%
+                  </div>
                 </div>
               </div>
+              <button
+                @click="aiSummaryExpanded = true"
+                class="p-1 text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded transition-colors"
+                title="Sýna allar upplýsingar"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
             </div>
+
+            <!-- Expanded View -->
+            <div v-else>
+              <!-- AI Badge Header -->
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-full text-xs font-semibold">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span>Gervigreind</span>
+                  </div>
+                  <span class="text-sm font-semibold text-gray-800">Útdregin upplýsingar</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-600">Áreiðanleiki:</span>
+                    <div
+                      class="px-2 py-1 rounded text-xs font-bold"
+                      :class="getConfidenceColor(selectedConversation.extractedData.confidence)"
+                    >
+                      {{ (selectedConversation.extractedData.confidence * 100).toFixed(0) }}%
+                    </div>
+                  </div>
+                  <button
+                    @click="aiSummaryExpanded = false"
+                    class="p-1 text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded transition-colors"
+                    title="Fela upplýsingar"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
 
             <!-- Extracted Fields -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -355,7 +382,7 @@
               <!-- Date & Time -->
               <div v-if="selectedConversation.extractedData.requestedDate">
                 <div class="text-xs font-medium text-gray-600 mb-1">Dagsetning</div>
-                <div class="text-sm font-semibold text-gray-900">{{ formatDate(selectedConversation.extractedData.requestedDate) }}</div>
+                <div class="text-sm font-semibold text-gray-900">{{ formatDateOnly(selectedConversation.extractedData.requestedDate) }}</div>
               </div>
               <div v-if="selectedConversation.extractedData.requestedTime">
                 <div class="text-xs font-medium text-gray-600 mb-1">Tími</div>
@@ -403,10 +430,11 @@
               </div>
             </div>
 
-            <!-- Footer with extraction timestamp -->
-            <div class="mt-4 pt-3 border-t border-purple-200">
-              <div class="text-xs text-gray-500">
-                Útdregið: {{ formatDateTime(selectedConversation.extractedData.extractedAt) }}
+              <!-- Footer with extraction timestamp -->
+              <div class="mt-4 pt-3 border-t border-purple-200">
+                <div class="text-xs text-gray-500">
+                  Útdregið: {{ formatDateTime(selectedConversation.extractedData.extractedAt) }}
+                </div>
               </div>
             </div>
           </div>
@@ -425,13 +453,26 @@
                   Bókanir fyrir {{ formatDate(selectedConversation.extractedData.requestedDate) }}
                 </span>
               </div>
-              <button
-                v-if="!bookingsLoading"
-                @click="loadBookingsForDate(selectedConversation.extractedData!.requestedDate!)"
-                class="text-xs text-green-700 hover:text-green-900 font-medium"
-              >
-                Endurnýja
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="!bookingsLoading"
+                  @click="loadBookingsForDate(selectedConversation.extractedData!.requestedDate!)"
+                  class="text-xs text-green-700 hover:text-green-900 font-medium"
+                >
+                  Endurnýja
+                </button>
+                <a
+                  :href="getBookingListingUrl(selectedConversation.extractedData!.requestedDate!)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Opna Greifinn.is
+                </a>
+              </div>
             </div>
 
             <!-- Loading State -->
@@ -441,45 +482,47 @@
             </div>
 
             <!-- Bookings List -->
-            <div v-else-if="bookingsForDate.length > 0" class="space-y-2">
-              <div
-                v-for="booking in bookingsForDate"
-                :key="booking.detailUrl"
-                class="bg-white rounded-lg p-3 border border-green-200 hover:shadow-md transition-shadow"
-              >
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex-1">
-                    <div class="font-semibold text-gray-900 text-sm">{{ booking.customerName }}</div>
-                    <div v-if="booking.shortDescription" class="text-xs text-gray-600 mt-1">{{ booking.shortDescription }}</div>
-                  </div>
-                  <div class="ml-3 text-right">
-                    <div class="text-sm font-medium text-gray-900">{{ booking.startTime }}</div>
-                    <div v-if="booking.endTime" class="text-xs text-gray-500">{{ booking.endTime }}</div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-3 text-xs">
-                  <div class="flex items-center gap-1">
-                    <span class="text-gray-600">Fullorðnir:</span>
-                    <span class="font-semibold text-gray-900">{{ booking.adultCount }}</span>
-                  </div>
-                  <div v-if="booking.childCount > 0" class="flex items-center gap-1">
-                    <span class="text-gray-600">Börn:</span>
-                    <span class="font-semibold text-gray-900">{{ booking.childCount }}</span>
-                  </div>
-                  <div v-if="booking.locationCode" class="flex items-center gap-1">
-                    <span class="text-gray-600">Staðsetning:</span>
-                    <span class="font-semibold text-gray-900">{{ booking.locationCode }}</span>
-                  </div>
-                  <div v-if="booking.status" class="ml-auto">
-                    <span
-                      class="px-2 py-0.5 rounded text-xs font-semibold"
-                      :class="getBookingStatusColor(booking.status)"
-                    >
-                      {{ booking.status }}
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <div v-else-if="bookingsForDate.length > 0" class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tími</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nafn</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gestir</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr
+                    v-for="booking in bookingsForDate"
+                    :key="booking.bookingId || booking.detailUrl"
+                    class="hover:bg-gray-50"
+                  >
+                    <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                      {{ booking.startTime }}
+                    </td>
+                    <td class="px-3 py-2 text-sm text-gray-900">
+                      <div class="flex items-center gap-2">
+                        <span>{{ booking.contactName }}</span>
+                        <a
+                          v-if="booking.detailUrl"
+                          :href="booking.detailUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-indigo-600 hover:text-indigo-800"
+                          title="Opna bókun"
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                      {{ booking.guestCount || 0 }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             <!-- Empty State -->
@@ -595,14 +638,33 @@
                   </div>
                 </div>
                 
-                <!-- AI Message Body (always visible) -->
-                <div v-if="message.isAIResponse && message.messageBody" class="px-4 pb-4">
+                <!-- AI Message Body Toggle -->
+                <div v-if="message.isAIResponse" class="px-4 py-2">
+                  <button
+                    @click="toggleAIMessage(message.id)"
+                    class="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1"
+                  >
+                    <svg 
+                      class="w-4 h-4 transition-transform"
+                      :class="{ 'rotate-180': expandedAIMessages[message.id] }"
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    {{ expandedAIMessages[message.id] ? 'Fela' : 'Sýna' }} AI greiningu
+                  </button>
+                </div>
+                
+                <!-- AI Message Body -->
+                <div v-if="message.isAIResponse && message.messageBody && expandedAIMessages[message.id]" class="px-4 pb-4">
                   <div class="bg-white p-4 rounded border border-blue-200 whitespace-pre-wrap text-sm text-gray-800 font-mono">
                     {{ message.messageBody }}
                   </div>
                 </div>
                 
-                <!-- Regular Message Body Toggle -->
+                <!-- Regular Message Body Toggle (incoming/outgoing) -->
                 <div v-else-if="!message.isAIResponse" class="px-4 py-2">
                   <button
                     @click="loadMessageBody(message.id)"
@@ -681,6 +743,107 @@
       @send="handleReplySend"
       @cancel="handleReplyCancel"
     />
+
+    <!-- Junk Filter Modal -->
+    <div
+      v-if="showJunkFilterModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click.self="closeJunkFilterModal"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md m-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">Setja í ruslasíu</h3>
+            <button
+              @click="closeJunkFilterModal"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <!-- Subject Field -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Efnisgrein</label>
+            <div class="relative">
+              <input
+                v-model="junkFilterForm.subject"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8"
+                placeholder="Efnisgrein (valfrjálst)"
+              />
+              <button
+                v-if="junkFilterForm.subject"
+                @click="junkFilterForm.subject = ''"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- From Email Field -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Netfang sendanda</label>
+            <div class="relative">
+              <input
+                v-model="junkFilterForm.senderEmail"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8"
+                placeholder="Netfang sendanda (valfrjálst)"
+              />
+              <button
+                v-if="junkFilterForm.senderEmail"
+                @click="junkFilterForm.senderEmail = ''"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-500">
+            Verður að skilgreina annaðhvort efnisgrein eða netfang sendanda
+          </p>
+
+          <div v-if="junkFilterError" class="text-sm text-red-600 bg-red-50 p-2 rounded">
+            {{ junkFilterError }}
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            @click="closeJunkFilterModal"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Hætta við
+          </button>
+          <button
+            @click="saveJunkFilter"
+            :disabled="savingJunkFilter || (!junkFilterForm.subject?.trim() && !junkFilterForm.senderEmail?.trim())"
+            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg
+              v-if="savingJunkFilter"
+              class="animate-spin h-4 w-4"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Vista
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -692,37 +855,49 @@ import type { UserEmailMappingDto } from '~/types/userEmailSettings'
 const route = useRoute()
 const { currentUser } = useAuth()
 const { getConversations, getConversation, getMessageBody, updateStatus: updateStatusApi, reparseConversation: reparseConversationApi, replyToConversation } = useEmails()
-const { getWeekBookings } = useBookings()
+const { getTableBookings } = useTableBookings()
 const { getEmailMappings, getEmailSignature } = useUserEmailSettings()
-
-// Check if user has email access (granted by Egill)
-const hasEmailAccess = computed(() => {
-  if (!currentUser.value) return false
-  // Access is granted if the current user is Egill (case-insensitive)
-  return currentUser.value.username.toLowerCase() === 'egill'
-})
+const { createJunkFilter } = useEmailJunkFilters()
 
 const conversations = ref<EmailConversationDto[]>([])
 const loading = ref(true)
-const currentPage = ref(1)
+const loadingMore = ref(false)
+const hasMore = ref(true)
 const pageSize = ref(50)
 const totalCount = ref(0)
-const totalPages = ref(0)
+
+// Virtual scrolling
+const scrollContainerRef = ref<HTMLElement | null>(null)
+const itemHeight = 80 // Estimated height of each conversation item in pixels
+const visibleBuffer = 5 // Number of items to render outside viewport
+const scrollTop = ref(0)
+const containerHeight = ref(0)
 
 const selectedConversationId = ref<string | null>(null)
 const selectedConversation = ref<EmailConversationDto | null>(null)
 const conversationLoading = ref(false)
 const messageBodies = ref<Record<string, EmailMessageBodyDto>>({})
+const expandedAIMessages = ref<Record<string, boolean>>({})
 const selectedStatus = ref('')
 const reparsing = ref(false)
 
-const bookingsForDate = ref<BookingDto[]>([])
+const bookingsForDate = ref<any[]>([])
 const bookingsLoading = ref(false)
 
 const statusMessage = ref<string>('')
 const statusMessageType = ref<'loading' | 'success' | 'error' | 'info'>('info')
 
 const showReplyModal = ref(false)
+const showActionsDropdown = ref(false)
+const actionsDropdownRef = ref<HTMLElement | null>(null)
+const aiSummaryExpanded = ref(false)
+const showJunkFilterModal = ref(false)
+const savingJunkFilter = ref(false)
+const junkFilterError = ref('')
+const junkFilterForm = ref({
+  subject: '',
+  senderEmail: ''
+})
 const emailMappings = ref<UserEmailMappingDto[]>([])
 const emailSignature = ref<string>('')
 const replyModalRef = ref<InstanceType<typeof EmailReplyModal> | null>(null)
@@ -748,44 +923,70 @@ const clearStatusMessage = () => {
   statusMessage.value = ''
 }
 
-const loadConversations = async () => {
-  loading.value = true
-  setStatusMessage('Hleður samtölum...', 'loading')
+const handleFilterChange = () => {
+  conversations.value = []
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.scrollTop = 0
+  }
+  loadConversations(false)
+}
+
+const loadConversations = async (append = false) => {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    conversations.value = []
+    hasMore.value = true
+    setStatusMessage('Hleður samtölum...', 'loading')
+  }
+  
   try {
+    const currentPage = Math.floor(conversations.value.length / pageSize.value) + 1
     const result = await getConversations({
       status: filters.value.status || undefined,
       classification: filters.value.classification || undefined,
-      page: currentPage.value,
+      page: currentPage,
       pageSize: pageSize.value
     })
-    conversations.value = result.items
+    
+    if (append) {
+      conversations.value = [...conversations.value, ...result.items]
+    } else {
+      conversations.value = result.items
+    }
+    
     totalCount.value = result.totalCount
-    totalPages.value = result.totalPages
-    setStatusMessage(`Sótt ${result.items.length} samtöl`, 'success', 2000)
+    hasMore.value = conversations.value.length < result.totalCount
+    
+    if (!append) {
+      setStatusMessage(`Sótt ${result.items.length} samtöl`, 'success', 2000)
+    }
 
     // If we have a selected conversation, try to find it in the new list
     if (selectedConversationId.value) {
-      const found = result.items.find(c => c.id === selectedConversationId.value)
+      const found = conversations.value.find(c => c.id === selectedConversationId.value)
       if (found) {
         // Update the selected conversation with fresh data
-        // Note: conversations in list don't have messages, so we keep the existing selectedConversation
-        // but update its status and other fields from the list
         if (selectedConversation.value) {
           selectedConversation.value.status = found.status
           selectedConversation.value.classification = found.classification
           selectedConversation.value.messageCount = found.messageCount
           selectedConversation.value.lastMessageReceivedAt = found.lastMessageReceivedAt
         }
-      } else {
-        // Conversation not in current page, reload it
+      } else if (!append) {
+        // Conversation not in current list, reload it
         await loadSelectedConversation(selectedConversationId.value)
       }
     }
   } catch (error) {
     console.error('Error loading conversations:', error)
-    setStatusMessage('Villa kom upp við að hlaða samtölum', 'error', 5000)
+    if (!append) {
+      setStatusMessage('Villa kom upp við að hlaða samtölum', 'error', 5000)
+    }
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
 
@@ -812,26 +1013,51 @@ const loadBookingsForDate = async (dateString: string, silent = false) => {
   }
 
   try {
-    // Parse the date string and convert to Unix timestamp
+    // Parse the date string
     const date = new Date(dateString)
-    const unixTimestamp = Math.floor(date.getTime() / 1000)
+    const fromDate = new Date(date)
+    fromDate.setHours(0, 0, 0, 0)
+    
+    // The filter is midnight to midnight, so toDate should be the next day
+    const toDate = new Date(date)
+    toDate.setDate(toDate.getDate() + 1)
+    toDate.setHours(0, 0, 0, 0)
 
-    // Fetch bookings for the week containing this date
-    const weekData = await getWeekBookings(unixTimestamp) as BookingWeekDto
+    // Fetch bookings for the specific date using tableBookingService
+    const result = await getTableBookings(
+      fromDate,
+      toDate,
+      undefined, // contactName
+      undefined, // contactPhone
+      undefined, // statusId
+      1, // page
+      1000 // pageSize - large to get all bookings for the day
+    )
 
-    // Find bookings for the specific date
-    const targetDate = new Date(dateString)
-    targetDate.setHours(0, 0, 0, 0)
-
-    for (const day of weekData.days) {
-      const dayDate = new Date(day.date)
-      dayDate.setHours(0, 0, 0, 0)
-
-      if (dayDate.getTime() === targetDate.getTime()) {
-        bookingsForDate.value = day.bookings || []
-        break
+    // Map TableBookingDto to display format
+    bookingsForDate.value = result.bookings.map(booking => {
+      // Format time in 24-hour format (HH:mm) like greifinn.is
+      let startTime = ''
+      if (booking.timestamp) {
+        const date = new Date(booking.timestamp)
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        startTime = `${hours}:${minutes}`
       }
-    }
+      
+      return {
+        bookingId: booking.bookingId,
+        timestamp: booking.timestamp,
+        contactName: booking.contactName || 'Óþekkt',
+        contactPhone: booking.contactPhone,
+        guestCount: booking.guestCount || 0,
+        status: booking.status || 'Óþekkt',
+        hasComment: booking.hasComment,
+        detailUrl: booking.detailUrl,
+        startTime: startTime,
+        date: dateString
+      }
+    })
     
     if (!silent) {
       if (bookingsForDate.value.length > 0) {
@@ -856,6 +1082,7 @@ const loadSelectedConversation = async (id: string, silent = false) => {
   if (!silent) {
     conversationLoading.value = true
     messageBodies.value = {} // Clear previous message bodies
+    expandedAIMessages.value = {} // Clear expanded AI messages
     bookingsForDate.value = [] // Clear previous bookings
     setStatusMessage('Hleður samtali...', 'loading')
   }
@@ -865,19 +1092,30 @@ const loadSelectedConversation = async (id: string, silent = false) => {
     // Sort messages by date descending (newest first)
     sortAndExpandMessages(conversation)
     
-    // Auto-expand the newest (first) message (only if not silent and not already loaded)
-    if (!silent && conversation.messages && conversation.messages.length > 0) {
-      const newestMessage = conversation.messages[0]
-      if (newestMessage && !messageBodies.value[newestMessage.id]) {
+    // Auto-expand only the latest incoming message and latest AI message
+    if (conversation.messages && conversation.messages.length > 0) {
+      // Find the latest incoming message (not outgoing, not AI)
+      const latestIncomingMessage = conversation.messages.find(m => !m.isOutgoing && !m.isAIResponse)
+      
+      // Find the latest AI message
+      const latestAIMessage = conversation.messages.find(m => m.isAIResponse)
+      
+      // Load body for latest incoming message
+      if (latestIncomingMessage && !messageBodies.value[latestIncomingMessage.id]) {
         try {
           if (!silent) {
             setStatusMessage('Hleður skilaboði...', 'loading')
           }
-          const body = await getMessageBody(newestMessage.id)
-          messageBodies.value[newestMessage.id] = body
+          const body = await getMessageBody(latestIncomingMessage.id)
+          messageBodies.value[latestIncomingMessage.id] = body
         } catch (error) {
-          console.error('Error loading newest message body:', error)
+          console.error('Error loading latest incoming message body:', error)
         }
+      }
+      
+      // Expand latest AI message
+      if (latestAIMessage) {
+        expandedAIMessages.value[latestAIMessage.id] = true
       }
     }
     
@@ -885,6 +1123,30 @@ const loadSelectedConversation = async (id: string, silent = false) => {
     selectedConversation.value = conversation
     selectedConversationId.value = id
     selectedStatus.value = conversation.status
+    
+    // Auto-expand new messages that weren't there before
+    if (conversation.messages && conversation.messages.length > 0) {
+      // Find the latest incoming message (not outgoing, not AI)
+      const latestIncomingMessage = conversation.messages.find(m => !m.isOutgoing && !m.isAIResponse)
+      
+      // Find the latest AI message
+      const latestAIMessage = conversation.messages.find(m => m.isAIResponse)
+      
+      // Load body for latest incoming message if not already loaded
+      if (latestIncomingMessage && !messageBodies.value[latestIncomingMessage.id]) {
+        try {
+          const body = await getMessageBody(latestIncomingMessage.id)
+          messageBodies.value[latestIncomingMessage.id] = body
+        } catch (error) {
+          console.error('Error loading latest incoming message body:', error)
+        }
+      }
+      
+      // Expand latest AI message if not already expanded
+      if (latestAIMessage && !expandedAIMessages.value[latestAIMessage.id]) {
+        expandedAIMessages.value[latestAIMessage.id] = true
+      }
+    }
 
     // Load bookings if a date is available and classification is booking-related (only if not silent or not already loaded)
     if (conversation.extractedData?.requestedDate && 
@@ -912,13 +1174,54 @@ const loadSelectedConversation = async (id: string, silent = false) => {
 const selectConversation = (id: string) => {
   if (selectedConversationId.value === id) return
   selectedConversationId.value = id
+  showActionsDropdown.value = false // Close dropdown when conversation changes
+  aiSummaryExpanded.value = false // Collapse AI summary when conversation changes
   loadSelectedConversation(id)
 }
 
-const changePage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-    loadConversations()
+// Virtual scrolling computed properties
+const totalHeight = computed(() => conversations.value.length * itemHeight)
+
+const visibleRange = computed(() => {
+  if (!containerHeight.value || conversations.value.length === 0) {
+    return { start: 0, end: Math.min(visibleBuffer * 2, conversations.value.length) }
+  }
+  
+  const start = Math.max(0, Math.floor(scrollTop.value / itemHeight) - visibleBuffer)
+  const visibleCount = Math.ceil(containerHeight.value / itemHeight)
+  const end = Math.min(conversations.value.length, start + visibleCount + visibleBuffer * 2)
+  
+  return { start, end }
+})
+
+const visibleConversations = computed(() => {
+  return conversations.value
+    .slice(visibleRange.value.start, visibleRange.value.end)
+    .map((conv, idx) => ({
+      ...conv,
+      _index: visibleRange.value.start + idx
+    }))
+})
+
+const offsetY = computed(() => visibleRange.value.start * itemHeight)
+
+// Scroll handler for infinite scroll
+const handleScroll = (event: Event) => {
+  const target = event.target as HTMLElement
+  scrollTop.value = target.scrollTop
+  containerHeight.value = target.clientHeight
+  
+  // Check if we're near the bottom (within 200px)
+  const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (scrollBottom < 200 && hasMore.value && !loadingMore.value && !loading.value) {
+    loadConversations(true)
+  }
+}
+
+// Update container height on resize
+const updateContainerHeight = () => {
+  if (scrollContainerRef.value) {
+    containerHeight.value = scrollContainerRef.value.clientHeight
   }
 }
 
@@ -934,6 +1237,10 @@ const loadMessageBody = async (messageId: string) => {
   } catch (error) {
     console.error('Error loading message body:', error)
   }
+}
+
+const toggleAIMessage = (messageId: string) => {
+  expandedAIMessages.value[messageId] = !expandedAIMessages.value[messageId]
 }
 
 const updateStatus = async () => {
@@ -1027,6 +1334,33 @@ const formatShortDate = (dateString: string) => {
   }
 }
 
+const formatShortDate24H = (dateString: string) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) {
+    // Today: show 24-hour time
+    return new Intl.DateTimeFormat('is-IS', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date)
+  } else if (diffDays === 1) {
+    return 'Í gær'
+  } else if (diffDays < 7) {
+    return new Intl.DateTimeFormat('is-IS', {
+      weekday: 'short'
+    }).format(date)
+  } else {
+    return new Intl.DateTimeFormat('is-IS', {
+      month: 'short',
+      day: 'numeric'
+    }).format(date)
+  }
+}
+
 const formatDateTime = (dateString: string) => {
   const date = new Date(dateString)
   return new Intl.DateTimeFormat('is-IS', {
@@ -1041,6 +1375,46 @@ const formatDateTime = (dateString: string) => {
 const formatTime = (timeString: string) => {
   const time = timeString.split(':')
   return `${time[0]}:${time[1]}`
+}
+
+const getBookingListingUrl = (dateString: string): string => {
+  const date = new Date(dateString)
+  const fromDate = new Date(date)
+  fromDate.setHours(0, 0, 0, 0)
+  
+  // The filter is midnight to midnight, so toDate should be the next day
+  const toDate = new Date(date)
+  toDate.setDate(toDate.getDate() + 1)
+  toDate.setHours(0, 0, 0, 0)
+  
+  // Format dates in Icelandic format (dd.MM.yyyy)
+  const formatIcelandicDate = (d: Date): string => {
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}.${month}.${year}`
+  }
+  
+  const baseUrl = 'https://www.greifinn.is/is/bordapontun/booking'
+  const params = new URLSearchParams({
+    'flt-timestamp[from]': formatIcelandicDate(fromDate),
+    'flt-timestamp[to]': formatIcelandicDate(toDate),
+    'flt-contactName': '',
+    'flt-contactPhone': '',
+    'flt-status': '-1',
+    'itemCount': '-1'
+  })
+  
+  return `${baseUrl}?${params.toString()}`
+}
+
+const formatDateOnly = (dateString: string) => {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat('is-IS', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }).format(date)
 }
 
 const getStatusLabel = (status: string) => {
@@ -1063,6 +1437,17 @@ const getStatusColor = (status: string) => {
     Archived: 'bg-gray-100 text-gray-800'
   }
   return colors[status] || 'bg-gray-100 text-gray-800'
+}
+
+const getStatusBorderColor = (status: string) => {
+  const colors: Record<string, string> = {
+    New: 'border-l-blue-500',
+    InProgress: 'border-l-red-500',
+    AwaitingResponse: 'border-l-orange-500',
+    Resolved: 'border-l-green-500',
+    Archived: 'border-l-gray-400'
+  }
+  return colors[status] || 'border-l-gray-400'
 }
 
 const getClassificationLabel = (classification: string) => {
@@ -1147,10 +1532,63 @@ const processMessageHtml = (html: string | undefined): string => {
   
   // Replace relative attachment URLs with absolute URLs
   // This handles URLs like /api/emails/messages/.../attachments/...
-  return html.replace(
+  let processed = html.replace(
     /src=["'](\/api\/emails\/messages\/[^"']+\/attachments\/[^"']+)["']/g,
     `src="${apiBase}$1"`
   )
+  
+  // Remove or hide images with CID URLs that weren't replaced by the backend
+  // Instead of replacing with a transparent pixel, hide the image entirely
+  // to prevent stretched placeholder images
+  
+  // Handle <img> tags with CID URLs in src - hide them by adding display:none
+  processed = processed.replace(
+    /<img([^>]*)\s+src=["']cid:[^"']*["']([^>]*)>/gi,
+    (match, before, after) => {
+      // Check if style attribute already exists
+      if (before.includes('style=') || after.includes('style=')) {
+        // Add display:none to existing style
+        return match.replace(/style=["']([^"']*)["']/i, (styleMatch, styleContent) => {
+          return `style="${styleContent}; display: none !important;"`
+        }).replace(/src=["']cid:[^"']*["']/gi, '')
+      } else {
+        // Add new style attribute
+        return `<img${before}${after} style="display: none !important;">`
+      }
+    }
+  )
+  
+  // Handle CID URLs in src attributes (standalone, not in img tags)
+  processed = processed.replace(
+    /src=["']cid:[^"']*["']/gi,
+    'src=""'
+  )
+  
+  // Handle CID URLs in src attributes (without quotes, edge case)
+  processed = processed.replace(
+    /src=cid:[^\s>]*/gi,
+    'src=""'
+  )
+  
+  // Handle CID URLs in href attributes
+  processed = processed.replace(
+    /href=["']cid:[^"']*["']/gi,
+    'href="#"'
+  )
+  
+  // Handle CID URLs in style attributes (background-image, etc.)
+  processed = processed.replace(
+    /url\(["']?cid:[^"')]*["']?\)/gi,
+    'url()'
+  )
+  
+  // Handle CID URLs in CSS @import or other places
+  processed = processed.replace(
+    /@import\s+["']cid:[^"']*["']/gi,
+    ''
+  )
+  
+  return processed
 }
 
 const replySubject = computed(() => {
@@ -1227,6 +1665,53 @@ const handleWorkflowReplyClick = (draftResponse: string) => {
   showReplyModal.value = true
 }
 
+const openJunkFilterModal = () => {
+  if (selectedConversation.value) {
+    junkFilterForm.value = {
+      subject: selectedConversation.value.subject || '',
+      senderEmail: selectedConversation.value.fromEmail || ''
+    }
+    junkFilterError.value = ''
+    showJunkFilterModal.value = true
+  }
+}
+
+const closeJunkFilterModal = () => {
+  showJunkFilterModal.value = false
+  junkFilterForm.value = {
+    subject: '',
+    senderEmail: ''
+  }
+  junkFilterError.value = ''
+}
+
+const saveJunkFilter = async () => {
+  // Validate that at least one field is provided
+  if (!junkFilterForm.value.subject?.trim() && !junkFilterForm.value.senderEmail?.trim()) {
+    junkFilterError.value = 'Verður að skilgreina annaðhvort efnisgrein eða netfang sendanda'
+    return
+  }
+
+  savingJunkFilter.value = true
+  junkFilterError.value = ''
+
+  try {
+    await createJunkFilter({
+      subject: junkFilterForm.value.subject?.trim() || null,
+      senderEmail: junkFilterForm.value.senderEmail?.trim() || null,
+      isActive: true
+    })
+
+    setStatusMessage('Ruslasía búin til', 'success', 3000)
+    closeJunkFilterModal()
+  } catch (error: any) {
+    console.error('Error creating junk filter:', error)
+    junkFilterError.value = error.data?.error || error.message || 'Villa kom upp við að vista ruslasíu'
+  } finally {
+    savingJunkFilter.value = false
+  }
+}
+
 // Polling for updates
 let pollingInterval: ReturnType<typeof setInterval> | null = null
 
@@ -1244,23 +1729,32 @@ const startPolling = () => {
 
 const loadConversationsSilent = async () => {
   try {
+    // For silent refresh, just reload the first page
     const result = await getConversations({
       status: filters.value.status || undefined,
       classification: filters.value.classification || undefined,
-      page: currentPage.value,
+      page: 1,
       pageSize: pageSize.value
     })
-    conversations.value = result.items
+    
+    // Update existing conversations or replace if structure changed
+    const existingIds = new Set(conversations.value.map(c => c.id))
+    const newItems = result.items.filter(item => existingIds.has(item.id))
+    
+    // Update existing items
+    newItems.forEach(newItem => {
+      const existingIndex = conversations.value.findIndex(c => c.id === newItem.id)
+      if (existingIndex !== -1) {
+        conversations.value[existingIndex] = { ...conversations.value[existingIndex], ...newItem }
+      }
+    })
+    
     totalCount.value = result.totalCount
-    totalPages.value = result.totalPages
 
     // If we have a selected conversation, try to find it in the new list
     if (selectedConversationId.value) {
-      const found = result.items.find(c => c.id === selectedConversationId.value)
+      const found = conversations.value.find(c => c.id === selectedConversationId.value)
       if (found) {
-        // Update the selected conversation with fresh data
-        // Note: conversations in list don't have messages, so we keep the existing selectedConversation
-        // but update its status and other fields from the list
         if (selectedConversation.value) {
           selectedConversation.value.status = found.status
           selectedConversation.value.classification = found.classification
@@ -1281,6 +1775,13 @@ const stopPolling = () => {
   }
 }
 
+// Handle click outside to close dropdown
+const handleClickOutside = (event: MouseEvent) => {
+  if (actionsDropdownRef.value && !actionsDropdownRef.value.contains(event.target as Node)) {
+    showActionsDropdown.value = false
+  }
+}
+
 // Check for conversation ID in query params on mount
 onMounted(() => {
   loadConversations()
@@ -1294,6 +1795,15 @@ onMounted(() => {
   
   // Start polling
   startPolling()
+  
+  // Add click outside handler
+  document.addEventListener('click', handleClickOutside)
+  
+  // Update container height on mount and resize
+  nextTick(() => {
+    updateContainerHeight()
+    window.addEventListener('resize', updateContainerHeight)
+  })
 })
 
 // Watch for route changes
@@ -1306,6 +1816,8 @@ watch(() => route.query.id, (newId) => {
 // Cleanup polling on unmount
 onUnmounted(() => {
   stopPolling()
+  document.removeEventListener('click', handleClickOutside)
+  window.removeEventListener('resize', updateContainerHeight)
 })
 </script>
 

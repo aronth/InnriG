@@ -4,7 +4,7 @@
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">Stillingar</h1>
-        <p class="mt-2 text-sm text-gray-600">Stjórnaðu persónulegum upplýsingum og öryggisstillingum</p>
+        <p class="mt-2 text-sm text-gray-600">Stjórnaðu persónulegum upplýsingum og öryggisstillingum þínum</p>
       </div>
 
       <!-- Navigation Tabs -->
@@ -32,6 +32,20 @@
             :class="$route.path === '/settings/users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
           >
             Notendur
+          </NuxtLink>
+          <NuxtLink
+            to="/settings/email-classifications"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path.startsWith('/settings/email-classifications') ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Tölvupóstflokkanir
+          </NuxtLink>
+          <NuxtLink
+            to="/settings/workflow-definitions"
+            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+            :class="$route.path.startsWith('/settings/workflow-definitions') ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+          >
+            Ferlar
           </NuxtLink>
         </nav>
       </div>
@@ -316,6 +330,32 @@
           </div>
         </div>
       </div>
+
+      <!-- Debug Section -->
+      <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-6 py-5 border-b border-gray-200">
+          <h2 class="text-lg font-medium text-gray-900">Debug - Authentication Claims</h2>
+          <p class="mt-1 text-sm text-gray-500">Test authentication claims in cookie</p>
+        </div>
+        <div class="px-6 py-5">
+          <button
+            @click="testClaims"
+            :disabled="loadingClaims"
+            class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ loadingClaims ? 'Hleður...' : 'Prófa Claims' }}
+          </button>
+          
+          <div v-if="claimsResult" class="mt-4">
+            <h3 class="text-sm font-medium text-gray-900 mb-2">Results:</h3>
+            <pre class="bg-gray-100 p-4 rounded-md text-xs overflow-auto max-h-96">{{ JSON.stringify(claimsResult, null, 2) }}</pre>
+          </div>
+          
+          <div v-if="claimsError" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+            <p class="text-sm text-red-800">{{ claimsError }}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Add/Edit Email Modal -->
@@ -400,7 +440,7 @@
 <script setup lang="ts">
 import type { UserEmailMappingDto } from '~/types/userEmailSettings'
 
-const { currentUser, updateProfile, changePassword, getCurrentUser, canAccessAdmin } = useAuth()
+const { currentUser, updateProfile, changePassword, getCurrentUser, canAccessAdmin, canAccessSystemAdmin } = useAuth()
 const { getEmailMappings, createEmailMapping, updateEmailMapping, deleteEmailMapping, getEmailSignature, updateEmailSignature } = useUserEmailSettings()
 
 const nameForm = ref({
@@ -436,12 +476,37 @@ const emailForm = ref({
   isDefault: false
 })
 
+// Debug claims
+const loadingClaims = ref(false)
+const claimsResult = ref<any>(null)
+const claimsError = ref('')
+
 // Initialize name form when user loads
 watch(currentUser, (user) => {
   if (user) {
     nameForm.value.name = user.name
   }
 }, { immediate: true })
+
+const testClaims = async () => {
+  loadingClaims.value = true
+  claimsError.value = ''
+  claimsResult.value = null
+  
+  try {
+    const config = useRuntimeConfig()
+    const apiBase = config.public.apiBase
+    const { apiFetch } = useApi()
+    
+    const result = await apiFetch<any>(`${apiBase}/api/auth/debug/claims`)
+    claimsResult.value = result
+  } catch (error: any) {
+    claimsError.value = error.data?.message || error.message || 'Mistókst að hlaða claims'
+    console.error('Error fetching claims:', error)
+  } finally {
+    loadingClaims.value = false
+  }
+}
 
 const getUserInitials = (name: string): string => {
   if (!name) return '?'

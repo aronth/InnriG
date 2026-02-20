@@ -28,10 +28,18 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<EmailClassificationQueue> EmailClassificationQueues { get; set; }
     public DbSet<EmailExtractedData> EmailExtractedData { get; set; }
     public DbSet<UserEmailMapping> UserEmailMappings { get; set; }
+    public DbSet<UserEmailToken> UserEmailTokens { get; set; }
     public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
     public DbSet<WorkflowStepExecution> WorkflowStepExecutions { get; set; }
     public DbSet<WorkflowApproval> WorkflowApprovals { get; set; }
     public DbSet<EmailJunkFilter> EmailJunkFilters { get; set; }
+    public DbSet<Menu> Menus { get; set; }
+    public DbSet<MenuItem> MenuItems { get; set; }
+    public DbSet<Customer> Customers { get; set; }
+    public DbSet<Booking> Bookings { get; set; }
+    public DbSet<BookingMenuItem> BookingMenuItems { get; set; }
+    public DbSet<EmailClassification> EmailClassifications { get; set; }
+    public DbSet<WorkflowDefinition> WorkflowDefinitions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -326,6 +334,23 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .HasForeignKey(uem => uem.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // UserEmailToken Configuration
+        modelBuilder.Entity<UserEmailToken>()
+            .HasIndex(uet => uet.UserId);
+
+        modelBuilder.Entity<UserEmailToken>()
+            .HasIndex(uet => new { uet.UserId, uet.EmailAddress })
+            .IsUnique();
+
+        modelBuilder.Entity<UserEmailToken>()
+            .HasIndex(uet => uet.IsSystemInbox);
+
+        modelBuilder.Entity<UserEmailToken>()
+            .HasOne(uet => uet.User)
+            .WithMany()
+            .HasForeignKey(uet => uet.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // WorkflowInstance Configuration
         modelBuilder.Entity<WorkflowInstance>()
             .HasIndex(wi => wi.ConversationId)
@@ -384,5 +409,159 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
 
         modelBuilder.Entity<EmailJunkFilter>()
             .HasIndex(ejf => new { ejf.Subject, ejf.SenderEmail });
+
+        // Menu Configuration
+        modelBuilder.Entity<Menu>()
+            .HasIndex(m => m.Name);
+
+        modelBuilder.Entity<Menu>()
+            .Property(m => m.Name)
+            .HasMaxLength(200);
+
+        modelBuilder.Entity<Menu>()
+            .Property(m => m.ForWho)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<Menu>()
+            .Property(m => m.Description)
+            .HasMaxLength(1000);
+
+        // MenuItem Configuration
+        modelBuilder.Entity<MenuItem>()
+            .HasOne(mi => mi.Menu)
+            .WithMany(m => m.MenuItems)
+            .HasForeignKey(mi => mi.MenuId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<MenuItem>()
+            .HasIndex(mi => mi.MenuId);
+
+        modelBuilder.Entity<MenuItem>()
+            .Property(mi => mi.Name)
+            .HasMaxLength(200);
+
+        modelBuilder.Entity<MenuItem>()
+            .Property(mi => mi.Description)
+            .HasMaxLength(1000);
+
+        modelBuilder.Entity<MenuItem>()
+            .Property(mi => mi.Price)
+            .HasPrecision(18, 2);
+
+        // Customer Configuration
+        modelBuilder.Entity<Customer>()
+            .HasIndex(c => c.Phone);
+
+        modelBuilder.Entity<Customer>()
+            .HasIndex(c => c.Email);
+
+        modelBuilder.Entity<Customer>()
+            .Property(c => c.Name)
+            .HasMaxLength(300);
+
+        modelBuilder.Entity<Customer>()
+            .Property(c => c.Phone)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<Customer>()
+            .Property(c => c.Email)
+            .HasMaxLength(300);
+
+        modelBuilder.Entity<Customer>()
+            .Property(c => c.Notes)
+            .HasMaxLength(1000);
+
+        // Booking Configuration
+        modelBuilder.Entity<Booking>()
+            .HasIndex(b => b.BookingDate);
+
+        modelBuilder.Entity<Booking>()
+            .HasIndex(b => b.Status);
+
+        modelBuilder.Entity<Booking>()
+            .HasIndex(b => new { b.BookingDate, b.StartTime });
+
+        modelBuilder.Entity<Booking>()
+            .HasOne(b => b.Customer)
+            .WithMany(c => c.Bookings)
+            .HasForeignKey(b => b.CustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Booking>()
+            .HasOne(b => b.Location)
+            .WithMany()
+            .HasForeignKey(b => b.LocationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<Booking>()
+            .Property(b => b.Status)
+            .HasMaxLength(50);
+
+        modelBuilder.Entity<Booking>()
+            .Property(b => b.SpecialRequests)
+            .HasMaxLength(2000);
+
+        modelBuilder.Entity<Booking>()
+            .Property(b => b.Notes)
+            .HasMaxLength(2000);
+
+        // BookingMenuItem Configuration
+        modelBuilder.Entity<BookingMenuItem>()
+            .HasIndex(bmi => bmi.BookingId);
+
+        modelBuilder.Entity<BookingMenuItem>()
+            .HasIndex(bmi => bmi.MenuItemId);
+
+        modelBuilder.Entity<BookingMenuItem>()
+            .HasOne(bmi => bmi.Booking)
+            .WithMany(b => b.BookingMenuItems)
+            .HasForeignKey(bmi => bmi.BookingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BookingMenuItem>()
+            .HasOne(bmi => bmi.MenuItem)
+            .WithMany()
+            .HasForeignKey(bmi => bmi.MenuItemId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<BookingMenuItem>()
+            .Property(bmi => bmi.UnitPrice)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<BookingMenuItem>()
+            .Property(bmi => bmi.Notes)
+            .HasMaxLength(500);
+
+        // EmailClassification Configuration
+        modelBuilder.Entity<EmailClassification>()
+            .HasIndex(ec => ec.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<EmailClassification>()
+            .HasIndex(ec => ec.IsActive);
+
+        modelBuilder.Entity<EmailClassification>()
+            .HasIndex(ec => ec.IsSystem);
+
+        // WorkflowDefinition Configuration
+        modelBuilder.Entity<WorkflowDefinition>()
+            .HasIndex(wd => wd.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<WorkflowDefinition>()
+            .HasIndex(wd => wd.ClassificationId);
+
+        modelBuilder.Entity<WorkflowDefinition>()
+            .HasIndex(wd => wd.IsActive);
+
+        modelBuilder.Entity<WorkflowDefinition>()
+            .HasOne(wd => wd.Classification)
+            .WithMany(ec => ec.Workflows)
+            .HasForeignKey(wd => wd.ClassificationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // WorkflowStepDefinition is not an entity - it's serialized to JSON
+        // Explicitly ignore it to prevent EF Core from trying to map it
+        modelBuilder.Ignore<WorkflowStepDefinition>();
     }
 }

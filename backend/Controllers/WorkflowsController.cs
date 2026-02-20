@@ -15,15 +15,18 @@ namespace InnriGreifi.API.Controllers;
 public class WorkflowsController : ControllerBase
 {
     private readonly IWorkflowExecutionService _workflowService;
+    private readonly IWorkflowDefinitionService _workflowDefinitionService;
     private readonly AppDbContext _context;
     private readonly ILogger<WorkflowsController> _logger;
 
     public WorkflowsController(
         IWorkflowExecutionService workflowService,
+        IWorkflowDefinitionService workflowDefinitionService,
         AppDbContext context,
         ILogger<WorkflowsController> logger)
     {
         _workflowService = workflowService;
+        _workflowDefinitionService = workflowDefinitionService;
         _context = context;
         _logger = logger;
     }
@@ -161,6 +164,26 @@ public class WorkflowsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting pending approvals");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("definitions/by-name/{workflowType}")]
+    public async Task<IActionResult> GetWorkflowDefinitionByName(string workflowType, CancellationToken ct = default)
+    {
+        try
+        {
+            var definition = await _workflowDefinitionService.GetByNameAsync(workflowType, ct);
+            if (definition == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(definition);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting workflow definition by name {WorkflowType}", workflowType);
             return StatusCode(500, new { error = ex.Message });
         }
     }

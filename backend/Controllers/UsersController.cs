@@ -24,17 +24,24 @@ public class UsersController : ControllerBase
     {
         var users = await _userManager.Users
             .OrderBy(u => u.Name)
-            .Select(u => new UserDto
-            {
-                Id = u.Id,
-                Username = u.UserName ?? string.Empty,
-                Name = u.Name,
-                MustChangePassword = u.MustChangePassword,
-                CreatedAt = u.CreatedAt
-            })
             .ToListAsync();
 
-        return Ok(users);
+        var userDtos = new List<UserDto>();
+        foreach (var user in users)
+        {
+            var roles = await _userManager.GetRolesAsync(user);
+            userDtos.Add(new UserDto
+            {
+                Id = user.Id,
+                Username = user.UserName ?? string.Empty,
+                Name = user.Name,
+                MustChangePassword = user.MustChangePassword,
+                CreatedAt = user.CreatedAt,
+                Roles = roles.ToList()
+            });
+        }
+
+        return Ok(userDtos);
     }
 
     [HttpGet("{id}")]
@@ -44,13 +51,15 @@ public class UsersController : ControllerBase
         if (user == null)
             return NotFound();
 
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return Ok(userDto);
@@ -74,13 +83,15 @@ public class UsersController : ControllerBase
         if (!result.Succeeded)
             return BadRequest(result.Errors.Select(e => e.Description));
 
+        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
             Username = user.UserName ?? string.Empty,
             Name = user.Name,
             MustChangePassword = user.MustChangePassword,
-            CreatedAt = user.CreatedAt
+            CreatedAt = user.CreatedAt,
+            Roles = roles.ToList()
         };
 
         return Ok(userDto);

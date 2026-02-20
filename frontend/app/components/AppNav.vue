@@ -33,6 +33,14 @@
             >
               Borðapantanir
             </NuxtLink>
+            <NuxtLink 
+              v-if="canAccessAdmin"
+              to="/menus" 
+              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200"
+              :class="[$route.path.startsWith('/menus') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900']"
+            >
+              Matseðlar
+            </NuxtLink>
             
             <!-- Gift Cards - Hidden for now -->
             <!-- <NuxtLink 

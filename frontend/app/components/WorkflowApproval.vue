@@ -5,43 +5,78 @@
       <p class="text-sm text-yellow-800">{{ approvalPrompt }}</p>
     </div>
 
-    <!-- Order Details -->
-    <div v-if="selectedOrder" class="bg-white border border-gray-200 rounded-lg p-4">
-      <h4 class="text-sm font-semibold text-gray-900 mb-2">Valin pöntun</h4>
-      <div class="space-y-1 text-sm">
-        <div><span class="font-medium">Pöntunarnúmer:</span> {{ selectedOrder.orderId }}</div>
-        <div v-if="selectedOrder.customerName">
-          <span class="font-medium">Viðskiptavinur:</span> {{ selectedOrder.customerName }}
-        </div>
-        <div v-if="selectedOrder.totalPrice">
-          <span class="font-medium">Heildarupphæð:</span> {{ formatCurrency(selectedOrder.totalPrice) }}
+    <!-- Credit Issuance Workflow (Backward Compatibility) -->
+    <template v-if="isCreditIssuanceWorkflow">
+      <!-- Order Details -->
+      <div v-if="selectedOrder" class="bg-white border border-gray-200 rounded-lg p-4">
+        <h4 class="text-sm font-semibold text-gray-900 mb-2">Valin pöntun</h4>
+        <div class="space-y-1 text-sm">
+          <div><span class="font-medium">Pöntunarnúmer:</span> {{ selectedOrder.orderId }}</div>
+          <div v-if="selectedOrder.customerName">
+            <span class="font-medium">Viðskiptavinur:</span> {{ selectedOrder.customerName }}
+          </div>
+          <div v-if="selectedOrder.totalPrice">
+            <span class="font-medium">Heildarupphæð:</span> {{ formatCurrency(selectedOrder.totalPrice) }}
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Credit Amount -->
-    <div class="bg-white border border-gray-200 rounded-lg p-4">
-      <h4 class="text-sm font-semibold text-gray-900 mb-2">Inneignarupphæð</h4>
-      <input
-        v-model.number="creditAmount"
-        type="number"
-        step="1"
-        min="0"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        placeholder="Inneignarupphæð"
-      />
-    </div>
+      <!-- Credit Amount -->
+      <div class="bg-white border border-gray-200 rounded-lg p-4">
+        <h4 class="text-sm font-semibold text-gray-900 mb-2">Inneignarupphæð</h4>
+        <input
+          v-model.number="creditAmount"
+          type="number"
+          step="1"
+          min="0"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Inneignarupphæð"
+        />
+      </div>
 
-    <!-- Draft Response -->
-    <div class="bg-white border border-gray-200 rounded-lg p-4">
-      <h4 class="text-sm font-semibold text-gray-900 mb-2">Drög að svari</h4>
-      <textarea
-        v-model="draftResponse"
-        rows="6"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        placeholder="Svar..."
-      ></textarea>
-    </div>
+      <!-- Draft Response -->
+      <div class="bg-white border border-gray-200 rounded-lg p-4">
+        <h4 class="text-sm font-semibold text-gray-900 mb-2">Drög að svari</h4>
+        <textarea
+          v-model="draftResponse"
+          rows="6"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Svar..."
+        ></textarea>
+      </div>
+    </template>
+
+    <!-- Generic Workflow Approval Form -->
+    <template v-else>
+      <div
+        v-for="(value, key) in editableWorkflowData"
+        :key="key"
+        class="bg-white border border-gray-200 rounded-lg p-4"
+      >
+        <h4 class="text-sm font-semibold text-gray-900 mb-2">{{ formatFieldName(key) }}</h4>
+        <input
+          v-if="isNumberField(key, value)"
+          v-model.number="editableWorkflowData[key]"
+          type="number"
+          :step="isDecimalField(key) ? '0.01' : '1'"
+          :min="0"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <textarea
+          v-else-if="isTextAreaField(key, value)"
+          v-model="editableWorkflowData[key]"
+          rows="6"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="..."
+        ></textarea>
+        <input
+          v-else
+          v-model="editableWorkflowData[key]"
+          type="text"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+    </template>
 
     <!-- Actions -->
     <div class="flex gap-2">
@@ -103,6 +138,13 @@ const emit = defineEmits<{
 
 const { approveWorkflow, rejectWorkflow } = useWorkflows()
 
+// Detect if this is a credit issuance workflow (backward compatibility)
+const isCreditIssuanceWorkflow = computed(() => {
+  return props.workflow.workflowType === 'CreditIssuance' ||
+    (props.workflow.workflowData?.ProposedCreditAmount !== undefined &&
+     props.workflow.workflowData?.DraftResponse !== undefined)
+})
+
 const approvalPrompt = computed(() => {
   return props.workflow.workflowData?.ApprovalPrompt as string || 'Vinsamlegast yfirfarið og samþykkið eftirfarandi:'
 })
@@ -121,9 +163,14 @@ const selectedOrder = computed(() => {
       return null
     }
   }
+  // Also check if MatchedOrders is already an array
+  if (Array.isArray(matchedOrders)) {
+    return matchedOrders.find((o: any) => o.orderId === orderId) || null
+  }
   return null
 })
 
+// Credit issuance specific fields (backward compatibility)
 const creditAmount = ref<number>(
   (props.workflow.workflowData?.ProposedCreditAmount as number) || 0
 )
@@ -131,6 +178,17 @@ const creditAmount = ref<number>(
 const draftResponse = ref<string>(
   (props.workflow.workflowData?.DraftResponse as string) || ''
 )
+
+// Generic editable workflow data
+const editableWorkflowData = ref<Record<string, any>>({})
+
+// Initialize editable data from workflow data
+watch(() => props.workflow.workflowData, (data) => {
+  if (data && !isCreditIssuanceWorkflow.value) {
+    // Create a deep copy of workflow data for editing
+    editableWorkflowData.value = JSON.parse(JSON.stringify(data || {}))
+  }
+}, { immediate: true })
 
 const approving = ref(false)
 const rejecting = ref(false)
@@ -140,11 +198,22 @@ const rejectComment = ref('')
 const handleApprove = async () => {
   try {
     approving.value = true
-    await approveWorkflow(props.workflow.id, {
-      approvalData: {
+    
+    let approvalData: Record<string, any> = {}
+    
+    if (isCreditIssuanceWorkflow.value) {
+      // Backward compatibility: use credit issuance specific fields
+      approvalData = {
         ProposedCreditAmount: creditAmount.value,
         DraftResponse: draftResponse.value
       }
+    } else {
+      // Generic: send all editable workflow data
+      approvalData = editableWorkflowData.value
+    }
+    
+    await approveWorkflow(props.workflow.id, {
+      approvalData
     })
     emit('approved')
   } catch (error) {
@@ -181,6 +250,30 @@ const formatCurrency = (amount: number) => {
     currency: 'ISK',
     minimumFractionDigits: 0
   }).format(amount)
+}
+
+const formatFieldName = (key: string): string => {
+  // Convert camelCase/PascalCase to readable format
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim()
+}
+
+const isNumberField = (key: string, value: any): boolean => {
+  return typeof value === 'number' ||
+    (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '')
+}
+
+const isDecimalField = (key: string): boolean => {
+  const decimalFields = ['Amount', 'Price', 'Credit', 'Cost', 'Fee']
+  return decimalFields.some(field => key.includes(field))
+}
+
+const isTextAreaField = (key: string, value: any): boolean => {
+  const textAreaFields = ['Response', 'Draft', 'Comment', 'Message', 'Description', 'Notes']
+  return textAreaFields.some(field => key.includes(field)) ||
+    (typeof value === 'string' && value.length > 100)
 }
 </script>
 

@@ -1,4 +1,5 @@
 import type { WorkflowInstanceDto, WorkflowApprovalDto, ApproveWorkflowRequest } from '~/types/workflow'
+import type { WorkflowDefinition } from '~/types/workflowDefinition'
 
 export const useWorkflows = () => {
   const config = useRuntimeConfig()
@@ -44,12 +45,24 @@ export const useWorkflows = () => {
     return await apiFetch<WorkflowInstanceDto[]>(`${apiBase}/api/workflows/pending-approvals`)
   }
 
+  const getWorkflowDefinitionByName = async (workflowType: string): Promise<WorkflowDefinition | null> => {
+    try {
+      return await apiFetch<WorkflowDefinition>(`${apiBase}/api/workflows/definitions/by-name/${workflowType}`)
+    } catch (error: any) {
+      if (error.status === 404) {
+        return null
+      }
+      throw error
+    }
+  }
+
   return {
     getWorkflowByConversation,
     getWorkflow,
     approveWorkflow,
     rejectWorkflow,
-    getPendingApprovals
+    getPendingApprovals,
+    getWorkflowDefinitionByName
   }
 }
 

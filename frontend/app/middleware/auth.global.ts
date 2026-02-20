@@ -29,21 +29,28 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     }
     
     // Role-based route protection
-    const isAdmin = hasRole('Admin')
+    const isSystemAdmin = hasRole('SystemAdmin')
+    const isAdmin = hasRole('Admin') || isSystemAdmin
     const isManager = hasRole('Manager') || isAdmin
     const isUser = hasRole('User') || isManager
     
     // Define route access rules
+    const systemAdminOnlyRoutes = ['/settings/email-classifications', '/settings/workflow-definitions']
     const adminOnlyRoutes = ['/products', '/orders', '/settings/users', '/settings/system', '/suppliers', '/buyers', '/kpis', '/waittimes']
     const managerRoutes = ['/giftcards']
     const userRoutes = ['/bookings']
     
     // Check if current path requires specific roles
+    const requiresSystemAdmin = systemAdminOnlyRoutes.some(route => to.path.startsWith(route))
     const requiresAdmin = adminOnlyRoutes.some(route => to.path.startsWith(route))
     const requiresManager = managerRoutes.some(route => to.path.startsWith(route))
     const requiresUser = userRoutes.some(route => to.path.startsWith(route))
     
     // Redirect if user doesn't have required role
+    if (requiresSystemAdmin && !isSystemAdmin) {
+        return navigateTo('/unauthorized')
+    }
+    
     if (requiresAdmin && !isAdmin) {
         return navigateTo('/unauthorized')
     }

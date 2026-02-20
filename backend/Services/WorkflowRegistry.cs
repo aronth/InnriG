@@ -12,11 +12,13 @@ public class WorkflowRegistry
         // For now, we'll register them when we create the workflow definitions
     }
 
-    public static void RegisterWorkflow(WorkflowDefinition definition)
+    [Obsolete("WorkflowRegistry is deprecated. Use database-driven WorkflowDefinitions instead.")]
+    public static void RegisterWorkflow(WorkflowDefinition definition, string classificationName)
     {
-        _workflows[definition.Classification] = definition;
+        _workflows[classificationName] = definition;
     }
 
+    [Obsolete("WorkflowRegistry is deprecated. Use database-driven WorkflowDefinitions instead. This method is kept for backward compatibility during migration.")]
     public static WorkflowDefinition? GetWorkflowForClassification(string classification)
     {
         return _workflows.TryGetValue(classification, out var workflow) ? workflow : null;

@@ -43,7 +43,8 @@ public class TableBookingService : ITableBookingService
 
             var (bookings, totalCount) = ParseBookings(html);
             
-            // Determine if there are more pages
+            // Determine if this is a single day query
+            // The filter is midnight to midnight, so toDate should be the next day
             // For single day queries, itemCount=-1 gets all results, so no pagination
             var isSingleDay = fromDate.HasValue && toDate.HasValue &&
                               toDate.Value.Date == fromDate.Value.Date.AddDays(1);
@@ -320,10 +321,10 @@ public class TableBookingService : ITableBookingService
             // Cell 8: Tool column (with link) - class="toolCol last"
 
             // Log cell contents for debugging
-            _logger.LogDebug("Parsing booking row with {Count} cells", cells.Count);
+            _logger.LogInformation("Parsing booking row with {Count} cells", cells.Count);
             for (int i = 0; i < Math.Min(cells.Count, 9); i++)
             {
-                _logger.LogDebug("Cell {Index}: '{Content}' (class: '{Class}')", 
+                _logger.LogInformation("Cell {Index}: '{Content}' (class: '{Class}')", 
                     i, cells[i].InnerText.Trim(), cells[i].GetAttributeValue("class", ""));
             }
 
@@ -332,22 +333,66 @@ public class TableBookingService : ITableBookingService
             if (cells.Count > 0)
             {
                 var dateStr = cells[0].InnerText.Trim();
-                if (!string.IsNullOrEmpty(dateStr) && DateTime.TryParseExact(dateStr, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                _logger.LogInformation("Raw date string from cell 0: '{DateStr}'", dateStr);
+                if (!string.IsNullOrEmpty(dateStr))
                 {
-                    date = parsedDate;
-                    _logger.LogDebug("Found date '{Date}' in cell 0", dateStr);
+                    if (DateTime.TryParseExact(dateStr, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                    {
+                        date = parsedDate;
+                        _logger.LogInformation("Successfully parsed date '{Date}' from cell 0", dateStr);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to parse date '{DateStr}' using format 'dd.MM.yyyy'. Trying generic DateTime.Parse", dateStr);
+                        if (DateTime.TryParse(dateStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDateGeneric))
+                        {
+                            date = parsedDateGeneric;
+                            _logger.LogInformation("Successfully parsed date '{Date}' using generic DateTime.Parse", dateStr);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Failed to parse date '{DateStr}' using generic DateTime.Parse", dateStr);
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Date string from cell 0 is empty or null");
                 }
             }
+            else
+            {
+                _logger.LogWarning("No cells found in booking row");
+            }
 
-            // Cell 1: Time (HH:mm)
+            // Cell 1: Time (HH:mm) - SECOND COLUMN (as user confirmed)
             TimeSpan? time = null;
             if (cells.Count > 1)
             {
                 var timeStr = cells[1].InnerText.Trim();
-                if (!string.IsNullOrEmpty(timeStr) && TimeSpan.TryParseExact(timeStr, "hh\\:mm", CultureInfo.InvariantCulture, out var parsedTime))
+                _logger.LogInformation("Raw time string from cell 1 (second column): '{TimeStr}'", timeStr);
+                
+                // Try 24-hour format first (HH:mm)
+                if (!string.IsNullOrEmpty(timeStr) && TimeSpan.TryParseExact(timeStr, "HH\\:mm", CultureInfo.InvariantCulture, out var parsedTime24))
+                {
+                    time = parsedTime24;
+                    _logger.LogInformation("Successfully parsed time '{Time}' using 24-hour format (HH:mm) from '{TimeStr}'", parsedTime24, timeStr);
+                }
+                // Fallback to 12-hour format (hh:mm)
+                else if (!string.IsNullOrEmpty(timeStr) && TimeSpan.TryParseExact(timeStr, "hh\\:mm", CultureInfo.InvariantCulture, out var parsedTime12))
+                {
+                    time = parsedTime12;
+                    _logger.LogInformation("Successfully parsed time '{Time}' using 12-hour format (hh:mm) from '{TimeStr}'", parsedTime12, timeStr);
+                }
+                // Try generic TimeSpan parsing as last resort
+                else if (!string.IsNullOrEmpty(timeStr) && TimeSpan.TryParse(timeStr, out var parsedTime))
                 {
                     time = parsedTime;
-                    _logger.LogDebug("Found time '{Time}' in cell 1", timeStr);
+                    _logger.LogInformation("Successfully parsed time '{Time}' using generic TimeSpan.Parse from '{TimeStr}'", parsedTime, timeStr);
+                }
+                else
+                {
+                    _logger.LogWarning("Could not parse time string '{TimeStr}' from cell 1 (second column). Tried HH:mm, hh:mm, and generic TimeSpan.Parse", timeStr);
                 }
             }
 
@@ -357,11 +402,18 @@ public class TableBookingService : ITableBookingService
                 if (time.HasValue)
                 {
                     booking.Timestamp = date.Value.Date.Add(time.Value);
+                    _logger.LogInformation("Set timestamp to {Timestamp} (date: {Date}, time: {Time})", 
+                        booking.Timestamp, date.Value.Date, time.Value);
                 }
                 else
                 {
                     booking.Timestamp = date.Value;
+                    _logger.LogInformation("Set timestamp to {Timestamp} (date only, no time)", booking.Timestamp);
                 }
+            }
+            else
+            {
+                _logger.LogWarning("Cannot set timestamp - date is null. Time was: {Time}", time?.ToString() ?? "null");
             }
 
             // Cell 2: Contact Name

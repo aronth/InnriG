@@ -6,10 +6,12 @@ public static class CreditIssuanceWorkflowDefinition
 {
     public static WorkflowDefinition GetDefinition()
     {
+        // Note: ClassificationId will be set in migration when seeding to database
+        // This method is kept for backward compatibility during migration
         return new WorkflowDefinition
         {
             Name = "CreditIssuance",
-            Classification = "Complaint",
+            // ClassificationId will be set when migrating to database
             Steps = new List<WorkflowStepDefinition>
             {
                 new()

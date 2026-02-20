@@ -243,22 +243,27 @@ public class EmailClassificationService : IEmailClassificationService
     {
         var model = _configuration["OpenAI:Model"] ?? "gpt-4o-mini";
 
-        var systemPrompt = @"You are an email classifier for a restaurant booking system.
-Classify this email into one of these categories:
-- GeneralInquiry
-- Sponsorship
-- Marketing
-- Accounting
-- GroupBooking
-- BuffetBooking
-- TableBooking
-- Complaint
+        // Load active classifications from database
+        var classifications = await _context.EmailClassifications
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.IsSystem ? 0 : 1) // System classifications first
+            .ThenBy(c => c.Name)
+            .ToListAsync(ct);
 
-Respond with ONLY a JSON object in this exact format:
-{
-  ""classification"": ""CategoryName"",
-  ""confidence"": 0.0-1.0
-}";
+        if (!classifications.Any())
+        {
+            _logger.LogWarning("No active classifications found in database. Using default classification.");
+            return ("GeneralInquiry", 0.5m);
+        }
+
+        // Build dynamic system prompt
+        var defaultSystemPrompt = @"You are an email classifier for a restaurant booking system.
+Classify this email into one of these categories:";
+
+        var classificationsList = string.Join("\n", classifications.Select(c => 
+            $"- {c.Name}: {c.Description}"));
+
+        var systemPrompt = $"{defaultSystemPrompt}\n{classificationsList}\n\nRespond with ONLY a JSON object in this exact format:\n{{\n  \"classification\": \"CategoryName\",\n  \"confidence\": 0.0-1.0\n}}";
 
         var chatMessages = new List<ChatMessage>
         {
@@ -836,7 +841,7 @@ Skrifaðu vingjarnlegt og faglegt svar sem er viðeigandi fyrir þessa tegund be
         }
     }
 
-    private async Task<EmailMessage> CreateAIAnalysisMessageAsync(
+    private Task<EmailMessage> CreateAIAnalysisMessageAsync(
         Guid conversationId,
         string classification,
         decimal confidence,
@@ -897,7 +902,7 @@ Suggested Response:
 
         _context.EmailMessages.Add(aiMessage);
         _logger.LogInformation("AI analysis message created with ID {MessageId}, body length: {Length}", aiMessage.Id, messageBody.Length);
-        return aiMessage;
+        return Task.FromResult(aiMessage);
     }
 
     public async Task<ClassificationResult> RegenerateAIAnalysisAsync(Guid messageId, CancellationToken ct = default)

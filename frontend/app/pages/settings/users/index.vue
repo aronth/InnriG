@@ -214,6 +214,7 @@
                         <option value="User">Notandi</option>
                         <option value="Manager">Umsjónarmaður</option>
                         <option value="Admin">Stjórnandi</option>
+                        <option value="SystemAdmin">Kerfisstjórnandi</option>
                       </select>
                       <p class="mt-1 text-xs text-gray-500">Ef ekkert er valið verður notandi búinn til með "Notandi" hlutverk</p>
                     </div>
@@ -559,13 +560,13 @@ const manageRoles = async (user: User) => {
   roleError.value = ''
   showRoleModal.value = true
   
-  // Load available roles if not already loaded
-  if (allRoles.value.length === 0) {
-    try {
-      allRoles.value = await getAvailableRoles()
-    } catch (error: any) {
-      roleError.value = 'Mistókst að hlaða hlutverkum'
-    }
+  // Always reload available roles to ensure we have the latest list
+  try {
+    allRoles.value = await getAvailableRoles()
+    console.log('Available roles loaded:', allRoles.value)
+  } catch (error: any) {
+    roleError.value = 'Mistókst að hlaða hlutverkum'
+    console.error('Error loading roles:', error)
   }
 }
 
@@ -619,6 +620,7 @@ const closeRoleModal = () => {
 
 const getRoleLabel = (role: string): string => {
   const labels: Record<string, string> = {
+    'SystemAdmin': 'Kerfisstjórnandi',
     'Admin': 'Stjórnandi',
     'Manager': 'Umsjónarmaður',
     'User': 'Notandi'
@@ -628,6 +630,7 @@ const getRoleLabel = (role: string): string => {
 
 const getRoleBadgeClass = (role: string): string => {
   const classes: Record<string, string> = {
+    'SystemAdmin': 'bg-orange-100 text-orange-800',
     'Admin': 'bg-red-100 text-red-800',
     'Manager': 'bg-purple-100 text-purple-800',
     'User': 'bg-blue-100 text-blue-800'

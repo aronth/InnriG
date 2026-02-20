@@ -1,7 +1,11 @@
+using System.Net.Http;
+using Azure.Core;
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
+using Microsoft.Kiota.Authentication;
 using Microsoft.Kiota.Authentication.Azure;
+using Microsoft.Kiota.Http.HttpClientLibrary;
 
 namespace InnriGreifi.API.Services;
 
@@ -9,14 +13,19 @@ public class GraphEmailService : IGraphEmailService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<GraphEmailService> _logger;
+    private readonly IMicrosoftOAuthService? _oauthService;
     private GraphServiceClient? _graphClient;
     private readonly string? _sharedInboxEmail;
     private readonly bool _isConfigured;
 
-    public GraphEmailService(IConfiguration configuration, ILogger<GraphEmailService> logger)
+    public GraphEmailService(
+        IConfiguration configuration, 
+        ILogger<GraphEmailService> logger,
+        IMicrosoftOAuthService? oauthService = null)
     {
         _configuration = configuration;
         _logger = logger;
+        _oauthService = oauthService;
         _sharedInboxEmail = configuration["Email:SharedInboxEmail"];
         _isConfigured = EmailConfigurationHelper.IsEmailConfigured(configuration);
         
@@ -56,14 +65,121 @@ public class GraphEmailService : IGraphEmailService
         return _graphClient;
     }
 
+    private GraphServiceClient? GetGraphClientForUser(string accessToken)
+    {
+        try
+        {
+            // Create a custom HTTP message handler that adds the bearer token
+            var handler = new BearerTokenHandler(accessToken);
+            var httpClient = new HttpClient(handler);
+            
+            // Create a bearer token authentication provider using the access token
+            // We'll use AzureIdentityAuthenticationProvider with a custom token credential
+            var tokenCredential = new BearerTokenCredential(accessToken);
+            var authProvider = new AzureIdentityAuthenticationProvider(tokenCredential, scopes: new[] { "https://graph.microsoft.com/.default" });
+            var requestAdapter = new HttpClientRequestAdapter(authProvider, httpClient: httpClient);
+            
+            return new GraphServiceClient(requestAdapter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Graph client for user");
+            return null;
+        }
+    }
+
+    private class BearerTokenCredential : TokenCredential
+    {
+        private readonly string _token;
+
+        public BearerTokenCredential(string token)
+        {
+            _token = token;
+        }
+
+        public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        {
+            // Return the token with a far future expiry (tokens are typically valid for 1 hour)
+            return new AccessToken(_token, DateTimeOffset.UtcNow.AddHours(1));
+        }
+
+        public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        {
+            return new ValueTask<AccessToken>(GetToken(requestContext, cancellationToken));
+        }
+    }
+
+    private class BearerTokenHandler : DelegatingHandler
+    {
+        private readonly string _token;
+
+        public BearerTokenHandler(string token) : base(new HttpClientHandler())
+        {
+            _token = token;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _token);
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
+
     public async Task<List<GraphMessageInfo>> GetMessagesAsync(DateTime? since = null, CancellationToken ct = default)
     {
         try
         {
-            var client = GetGraphClient();
-            if (client == null || string.IsNullOrWhiteSpace(_sharedInboxEmail))
+            GraphServiceClient? client = null;
+            string? inboxEmail = _sharedInboxEmail;
+
+            // Try to use delegated auth for system inbox first
+            if (_oauthService != null)
             {
-                _logger.LogWarning("Email is not configured. Cannot retrieve messages.");
+                var systemInboxToken = await _oauthService.GetSystemInboxTokenAsync(ct);
+                if (systemInboxToken != null)
+                {
+                    _logger.LogDebug("Found system inbox token for email {Email}, IsSystemInbox: {IsSystemInbox}", 
+                        systemInboxToken.EmailAddress, systemInboxToken.IsSystemInbox);
+                    
+                    // Refresh token if needed
+                    var accessToken = await _oauthService.GetAccessTokenAsync(
+                        systemInboxToken.UserId, 
+                        systemInboxToken.EmailAddress, 
+                        ct);
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        client = GetGraphClientForUser(accessToken);
+                        inboxEmail = systemInboxToken.EmailAddress;
+                        _logger.LogInformation("Using delegated auth for system inbox: {Email}", inboxEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to get access token for system inbox {Email}. Token may have been revoked. Please reconnect the email.", systemInboxToken.EmailAddress);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("No system inbox token found. Please connect an email and mark it as system inbox.");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("OAuth service is not available. Cannot use delegated auth for system inbox.");
+            }
+
+            // Fall back to app-only auth if delegated auth not available
+            if (client == null)
+            {
+                _logger.LogDebug("Falling back to app-only authentication");
+                client = GetGraphClient();
+            }
+
+            if (client == null || string.IsNullOrWhiteSpace(inboxEmail))
+            {
+                _logger.LogWarning("Email is not configured. Cannot retrieve messages. System inbox: {HasSystemInbox}, Shared inbox email: {SharedInboxEmail}", 
+                    _oauthService != null ? (await _oauthService.GetSystemInboxTokenAsync(ct) != null).ToString() : "N/A",
+                    !string.IsNullOrWhiteSpace(_sharedInboxEmail) ? _sharedInboxEmail : "Not set");
                 return new List<GraphMessageInfo>();
             }
 
@@ -74,7 +190,7 @@ public class GraphEmailService : IGraphEmailService
                 ? $"receivedDateTime ge {since.Value:yyyy-MM-ddTHH:mm:ssZ}"
                 : null;
 
-            var response = await client.Users[_sharedInboxEmail].Messages.GetAsync(requestConfiguration =>
+            var response = await client.Users[inboxEmail].Messages.GetAsync(requestConfiguration =>
             {
                 requestConfiguration.QueryParameters = new Microsoft.Graph.Users.Item.Messages.MessagesRequestBuilder.MessagesRequestBuilderGetQueryParameters
                 {
@@ -113,14 +229,47 @@ public class GraphEmailService : IGraphEmailService
     {
         try
         {
-            var client = GetGraphClient();
-            if (client == null || string.IsNullOrWhiteSpace(_sharedInboxEmail))
+            GraphServiceClient? client = null;
+            string? inboxEmail = _sharedInboxEmail;
+
+            // Try to use delegated auth for system inbox first
+            if (_oauthService != null)
+            {
+                var systemInboxToken = await _oauthService.GetSystemInboxTokenAsync(ct);
+                if (systemInboxToken != null && !string.IsNullOrEmpty(systemInboxToken.AccessToken))
+                {
+                    // Refresh token if needed
+                    var accessToken = await _oauthService.GetAccessTokenAsync(
+                        systemInboxToken.UserId, 
+                        systemInboxToken.EmailAddress, 
+                        ct);
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        client = GetGraphClientForUser(accessToken);
+                        inboxEmail = systemInboxToken.EmailAddress;
+                        _logger.LogDebug("Using delegated auth for system inbox: {Email}", inboxEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to get access token for system inbox {Email}. Token may have been revoked. Please reconnect the email.", systemInboxToken.EmailAddress);
+                    }
+                }
+            }
+
+            // Fall back to app-only auth if delegated auth not available
+            if (client == null)
+            {
+                client = GetGraphClient();
+            }
+
+            if (client == null || string.IsNullOrWhiteSpace(inboxEmail))
             {
                 _logger.LogWarning("Email is not configured. Cannot retrieve message {MessageId}.", messageId);
                 return null;
             }
             
-            var message = await client.Users[_sharedInboxEmail].Messages[messageId].GetAsync(requestConfiguration =>
+            var message = await client.Users[inboxEmail].Messages[messageId].GetAsync(requestConfiguration =>
             {
                 requestConfiguration.QueryParameters = new Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder.MessageItemRequestBuilderGetQueryParameters
                 {
@@ -150,14 +299,47 @@ public class GraphEmailService : IGraphEmailService
     {
         try
         {
-            var client = GetGraphClient();
-            if (client == null || string.IsNullOrWhiteSpace(_sharedInboxEmail))
+            GraphServiceClient? client = null;
+            string? inboxEmail = _sharedInboxEmail;
+
+            // Try to use delegated auth for system inbox first
+            if (_oauthService != null)
+            {
+                var systemInboxToken = await _oauthService.GetSystemInboxTokenAsync(ct);
+                if (systemInboxToken != null && !string.IsNullOrEmpty(systemInboxToken.AccessToken))
+                {
+                    // Refresh token if needed
+                    var accessToken = await _oauthService.GetAccessTokenAsync(
+                        systemInboxToken.UserId, 
+                        systemInboxToken.EmailAddress, 
+                        ct);
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        client = GetGraphClientForUser(accessToken);
+                        inboxEmail = systemInboxToken.EmailAddress;
+                        _logger.LogDebug("Using delegated auth for system inbox: {Email}", inboxEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to get access token for system inbox {Email}. Token may have been revoked. Please reconnect the email.", systemInboxToken.EmailAddress);
+                    }
+                }
+            }
+
+            // Fall back to app-only auth if delegated auth not available
+            if (client == null)
+            {
+                client = GetGraphClient();
+            }
+
+            if (client == null || string.IsNullOrWhiteSpace(inboxEmail))
             {
                 _logger.LogWarning("Email is not configured. Cannot retrieve message body {MessageId}.", messageId);
                 return null;
             }
             
-            var message = await client.Users[_sharedInboxEmail].Messages[messageId].GetAsync(requestConfiguration =>
+            var message = await client.Users[inboxEmail].Messages[messageId].GetAsync(requestConfiguration =>
             {
                 requestConfiguration.QueryParameters = new Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder.MessageItemRequestBuilderGetQueryParameters
                 {
@@ -186,8 +368,41 @@ public class GraphEmailService : IGraphEmailService
     {
         try
         {
-            var client = GetGraphClient();
-            if (client == null || string.IsNullOrWhiteSpace(_sharedInboxEmail))
+            GraphServiceClient? client = null;
+            string? inboxEmail = _sharedInboxEmail;
+
+            // Try to use delegated auth for system inbox first
+            if (_oauthService != null)
+            {
+                var systemInboxToken = await _oauthService.GetSystemInboxTokenAsync(ct);
+                if (systemInboxToken != null && !string.IsNullOrEmpty(systemInboxToken.AccessToken))
+                {
+                    // Refresh token if needed
+                    var accessToken = await _oauthService.GetAccessTokenAsync(
+                        systemInboxToken.UserId, 
+                        systemInboxToken.EmailAddress, 
+                        ct);
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        client = GetGraphClientForUser(accessToken);
+                        inboxEmail = systemInboxToken.EmailAddress;
+                        _logger.LogDebug("Using delegated auth for system inbox: {Email}", inboxEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to get access token for system inbox {Email}. Token may have been revoked. Please reconnect the email.", systemInboxToken.EmailAddress);
+                    }
+                }
+            }
+
+            // Fall back to app-only auth if delegated auth not available
+            if (client == null)
+            {
+                client = GetGraphClient();
+            }
+
+            if (client == null || string.IsNullOrWhiteSpace(inboxEmail))
             {
                 _logger.LogWarning("Email is not configured. Cannot mark message {MessageId} as read.", messageId);
                 return false;
@@ -198,7 +413,7 @@ public class GraphEmailService : IGraphEmailService
                 IsRead = true
             };
 
-            await client.Users[_sharedInboxEmail].Messages[messageId].PatchAsync(updateRequest, cancellationToken: ct);
+            await client.Users[inboxEmail].Messages[messageId].PatchAsync(updateRequest, cancellationToken: ct);
             
             _logger.LogInformation("Marked message {MessageId} as read", messageId);
             return true;
@@ -274,15 +489,48 @@ public class GraphEmailService : IGraphEmailService
     {
         try
         {
-            var client = GetGraphClient();
-            if (client == null || string.IsNullOrWhiteSpace(_sharedInboxEmail))
+            GraphServiceClient? client = null;
+            string? inboxEmail = _sharedInboxEmail;
+
+            // Try to use delegated auth for system inbox first
+            if (_oauthService != null)
+            {
+                var systemInboxToken = await _oauthService.GetSystemInboxTokenAsync(ct);
+                if (systemInboxToken != null && !string.IsNullOrEmpty(systemInboxToken.AccessToken))
+                {
+                    // Refresh token if needed
+                    var accessToken = await _oauthService.GetAccessTokenAsync(
+                        systemInboxToken.UserId, 
+                        systemInboxToken.EmailAddress, 
+                        ct);
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        client = GetGraphClientForUser(accessToken);
+                        inboxEmail = systemInboxToken.EmailAddress;
+                        _logger.LogDebug("Using delegated auth for system inbox: {Email}", inboxEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to get access token for system inbox {Email}. Token may have been revoked. Please reconnect the email.", systemInboxToken.EmailAddress);
+                    }
+                }
+            }
+
+            // Fall back to app-only auth if delegated auth not available
+            if (client == null)
+            {
+                client = GetGraphClient();
+            }
+
+            if (client == null || string.IsNullOrWhiteSpace(inboxEmail))
             {
                 _logger.LogWarning("Email is not configured. Cannot retrieve attachment {AttachmentId} for message {MessageId}.", attachmentId, messageId);
                 return null;
             }
             
             // Get the attachment object first
-            var attachment = await client.Users[_sharedInboxEmail]
+            var attachment = await client.Users[inboxEmail]
                 .Messages[messageId]
                 .Attachments[attachmentId]
                 .GetAsync(requestConfiguration => { }, ct);
@@ -322,9 +570,49 @@ public class GraphEmailService : IGraphEmailService
         string? bcc = null,
         CancellationToken ct = default)
     {
+        return await SendReplyAsync(null, fromEmail, fromName, toEmail, toName, subject, bodyHtml, bodyText, inReplyToMessageId, conversationId, cc, bcc, ct);
+    }
+
+    public async Task<string?> SendReplyAsync(
+        Guid? userId,
+        string fromEmail,
+        string fromName,
+        string toEmail,
+        string toName,
+        string subject,
+        string bodyHtml,
+        string? bodyText,
+        string? inReplyToMessageId,
+        string? conversationId,
+        string? cc = null,
+        string? bcc = null,
+        CancellationToken ct = default)
+    {
         try
         {
-            var client = GetGraphClient();
+            GraphServiceClient? client = null;
+
+            // Use delegated auth if userId provided and OAuth service available
+            if (userId.HasValue && _oauthService != null)
+            {
+                var accessToken = await _oauthService.GetAccessTokenAsync(userId.Value, fromEmail, ct);
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    client = GetGraphClientForUser(accessToken);
+                    _logger.LogDebug("Using delegated auth for sending email from {FromEmail}", fromEmail);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to get access token for email {FromEmail}. Token may have been revoked. Please reconnect the email.", fromEmail);
+                }
+            }
+
+            // Fall back to app-only auth (will fail for sending, but keep for backward compatibility)
+            if (client == null)
+            {
+                client = GetGraphClient();
+            }
+
             if (client == null)
             {
                 _logger.LogWarning("Email is not configured. Cannot send reply email from {FromEmail} to {ToEmail}.", fromEmail, toEmail);

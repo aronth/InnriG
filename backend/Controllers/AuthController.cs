@@ -29,9 +29,28 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized("Invalid username or password");
 
-        var result = await _signInManager.PasswordSignInAsync(user, loginDto.Password, true, false);
-        if (!result.Succeeded)
+        // Validate password first
+        var passwordValid = await _userManager.CheckPasswordAsync(user, loginDto.Password);
+        if (!passwordValid)
             return Unauthorized("Invalid username or password");
+
+        // Get user roles and build claims
+        var roles = await _userManager.GetRolesAsync(user);
+        var claims = new List<System.Security.Claims.Claim>
+        {
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.UserName ?? string.Empty)
+        };
+        
+        // Add all role claims explicitly
+        foreach (var role in roles)
+        {
+            claims.Add(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role));
+        }
+        
+        // Sign in with all claims including roles
+        // Use the default Identity scheme which is configured by AddIdentity
+        await _signInManager.SignInWithClaimsAsync(user, true, claims);
 
         // Check if cookie was set by looking for Set-Cookie header
         // ASP.NET Core Identity sets the cookie via the authentication middleware
@@ -45,15 +64,13 @@ public class AuthController : ControllerBase
             cookieSet = setCookieHeader.Contains(cookieName);
         }
         
-        // If sign-in succeeded with isPersistent=true, cookie should be set
-        // So we can also trust that cookieSet will be true if sign-in succeeded
-        if (!cookieSet && result.Succeeded)
+        // Cookie should be set after SignInWithClaimsAsync
+        if (!cookieSet)
         {
             // Cookie is set by middleware, may not be in headers yet but will be sent
             cookieSet = true;
         }
 
-        var roles = await _userManager.GetRolesAsync(user);
         var userDto = new UserDto
         {
             Id = user.Id,
@@ -101,6 +118,31 @@ public class AuthController : ControllerBase
         return Ok(userDto);
     }
 
+    [HttpGet("debug/claims")]
+    [Authorize]
+    public IActionResult GetClaims()
+    {
+        // Debug endpoint to see what claims are actually in the authentication cookie
+        var claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+        var rolesFromClaims = User.Claims
+            .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+        
+        var isInSystemAdminRole = User.IsInRole("SystemAdmin");
+        var isInAdminRole = User.IsInRole("Admin");
+        
+        return Ok(new
+        {
+            allClaims = claims,
+            rolesFromClaims = rolesFromClaims,
+            isInSystemAdminRole = isInSystemAdminRole,
+            isInAdminRole = isInAdminRole,
+            identityName = User.Identity?.Name,
+            isAuthenticated = User.Identity?.IsAuthenticated
+        });
+    }
+
     [HttpPost("create-user")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserDto createUserDto)
@@ -115,7 +157,7 @@ public class AuthController : ControllerBase
 
         // Validate role if provided
         var roleName = string.IsNullOrEmpty(createUserDto.Role) ? "User" : createUserDto.Role;
-        var validRoles = new[] { "Admin", "Manager", "User" };
+        var validRoles = new[] { "SystemAdmin", "Admin", "Manager", "User" };
         if (!validRoles.Contains(roleName))
             return BadRequest($"Invalid role. Valid roles are: {string.Join(", ", validRoles)}");
 
@@ -172,11 +214,25 @@ public class AuthController : ControllerBase
         user.UpdatedAt = DateTime.UtcNow;
         await _userManager.UpdateAsync(user);
 
-        // Sign out and sign in again to refresh the cookie
+        // Sign out and sign in again with role claims to refresh the cookie
         await _signInManager.SignOutAsync();
-        await _signInManager.SignInAsync(user, true);
-
+        
+        // Get user roles and build claims
         var roles = await _userManager.GetRolesAsync(user);
+        var claims = new List<System.Security.Claims.Claim>
+        {
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.UserName ?? string.Empty)
+        };
+        
+        // Add all role claims explicitly
+        foreach (var role in roles)
+        {
+            claims.Add(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role));
+        }
+        
+        await _signInManager.SignInWithClaimsAsync(user, true, claims);
+
         var userDto = new UserDto
         {
             Id = user.Id,
@@ -201,7 +257,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound("User not found");
 
-        var validRoles = new[] { "Admin", "Manager", "User" };
+        var validRoles = new[] { "SystemAdmin", "Admin", "Manager", "User" };
         if (!validRoles.Contains(assignRoleDto.Role))
             return BadRequest($"Invalid role. Valid roles are: {string.Join(", ", validRoles)}");
 
@@ -262,7 +318,7 @@ public class AuthController : ControllerBase
     [Authorize(Roles = "Admin")]
     public IActionResult GetAvailableRoles()
     {
-        var roles = new[] { "Admin", "Manager", "User" };
+        var roles = new[] { "SystemAdmin", "Admin", "Manager", "User" };
         return Ok(roles);
     }
 

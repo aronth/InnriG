@@ -108,7 +108,8 @@ export const useAuth = () => {
         return currentUser.value?.roles?.includes(role) ?? false
     }
 
-    const isAdmin = computed(() => hasRole('Admin'))
+    const isSystemAdmin = computed(() => hasRole('SystemAdmin'))
+    const isAdmin = computed(() => hasRole('Admin') || isSystemAdmin.value)
     const isManager = computed(() => hasRole('Manager') || isAdmin.value)
     const isUser = computed(() => hasRole('User') || isManager.value)
 
@@ -116,6 +117,7 @@ export const useAuth = () => {
     const canAccessBookings = computed(() => isUser.value)
     const canAccessGiftCards = computed(() => isManager.value)
     const canAccessAdmin = computed(() => isAdmin.value)
+    const canAccessSystemAdmin = computed(() => isSystemAdmin.value)
 
     return {
         currentUser: readonly(currentUser),
@@ -131,12 +133,14 @@ export const useAuth = () => {
         getAvailableRoles,
         // Role checks
         hasRole,
+        isSystemAdmin,
         isAdmin,
         isManager,
         isUser,
         canAccessBookings,
         canAccessGiftCards,
-        canAccessAdmin
+        canAccessAdmin,
+        canAccessSystemAdmin
     }
 }
 

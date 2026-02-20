@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-gray-900">Vinnuflæði</h3>
+      <h3 class="text-sm font-semibold text-gray-900">Ferlar</h3>
       <span
         class="px-2 py-1 text-xs font-semibold rounded-full"
         :class="getStateColor(workflow.state)"
@@ -72,15 +72,20 @@
 </template>
 
 <script setup lang="ts">
-import type { WorkflowInstanceDto, WorkflowStepExecutionDto } from '~/types/workflow'
+import type { WorkflowInstanceDto } from '~/types/workflow'
+import type { WorkflowDefinition } from '~/types/workflowDefinition'
 
 const props = defineProps<{
   workflow: WorkflowInstanceDto
+  workflowDefinition?: WorkflowDefinition | null
 }>()
 
 const emit = defineEmits<{
   'reply-click': [draftResponse: string]
 }>()
+
+const { getStepDisplayName } = useWorkflowStepNames()
+const { formatStepResult: formatStepResultHelper } = useWorkflowStepResults()
 
 const handleReplyClick = () => {
   const draftResponse = props.workflow.workflowData?.DraftResponse
@@ -90,36 +95,47 @@ const handleReplyClick = () => {
 }
 
 const workflowSteps = computed(() => {
-  const stepTypes = [
-    'OrderLookup',
-    'OrderVerification',
-    'CreditCalculation',
-    'ResponseDraft',
-    'Approval',
-    'CreditIssuance',
-    'EmailSend'
-  ]
-
-  const stepNames: Record<string, string> = {
-    OrderLookup: 'Leita að pöntun',
-    OrderVerification: 'Staðfesta pöntun',
-    CreditCalculation: 'Reikna inneign',
-    ResponseDraft: 'Drög að svari',
-    Approval: 'Samþykki',
-    CreditIssuance: 'Úthluta inneign',
-    EmailSend: 'Senda svar'
+  // If we have a workflow definition, use it to build steps dynamically
+  if (props.workflowDefinition?.steps && props.workflowDefinition.steps.length > 0) {
+    const sortedSteps = [...props.workflowDefinition.steps].sort((a, b) => a.order - b.order)
+    
+    return sortedSteps.map((stepDef, index) => {
+      const execution = props.workflow.stepExecutions.find(se => se.stepType === stepDef.stepType)
+      // Determine status: if execution exists, use it; otherwise infer from currentStepIndex
+      let status = execution?.status
+      if (!status) {
+        // If we've passed this step index, it's completed; otherwise pending
+        const stepIndex = sortedSteps.findIndex(s => s.stepType === stepDef.stepType)
+        status = stepIndex < props.workflow.currentStepIndex ? 'Completed' : 'Pending'
+      }
+      
+      return {
+        name: getStepDisplayName(stepDef.stepType),
+        stepType: stepDef.stepType,
+        status,
+        result: execution?.result,
+        errorMessage: execution?.errorMessage,
+        requiresApproval: stepDef.requiresApproval
+      }
+    })
   }
-
-  return stepTypes.map((stepType, index) => {
-    const execution = props.workflow.stepExecutions.find(se => se.stepType === stepType)
-    return {
-      name: stepNames[stepType] || stepType,
-      stepType,
-      status: execution?.status || (index < props.workflow.currentStepIndex ? 'Completed' : 'Pending'),
-      result: execution?.result,
-      errorMessage: execution?.errorMessage
-    }
-  })
+  
+  // Fallback: show only executed steps if no definition available
+  return props.workflow.stepExecutions
+    .sort((a, b) => {
+      // Try to maintain order by execution time
+      const dateA = new Date(a.executedAt).getTime()
+      const dateB = new Date(b.executedAt).getTime()
+      return dateA - dateB
+    })
+    .map(execution => ({
+      name: getStepDisplayName(execution.stepType),
+      stepType: execution.stepType,
+      status: execution.status,
+      result: execution.result,
+      errorMessage: execution.errorMessage,
+      requiresApproval: false
+    }))
 })
 
 const getStateColor = (state: string) => {
@@ -146,25 +162,7 @@ const getStateLabel = (state: string) => {
 
 const formatStepResult = (step: any) => {
   if (!step.result) return ''
-  
-  if (step.stepType === 'OrderLookup' && step.result.MatchCount !== undefined) {
-    return `Fann ${step.result.MatchCount} pöntun(ar)`
-  }
-  if (step.stepType === 'CreditCalculation' && step.result.ProposedCreditAmount !== undefined) {
-    return `${formatCurrency(step.result.ProposedCreditAmount)}`
-  }
-  if (step.stepType === 'OrderVerification' && step.result.MatchConfidence !== undefined) {
-    return `Áreiðanleiki: ${(step.result.MatchConfidence * 100).toFixed(0)}%`
-  }
-  return ''
-}
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('is-IS', {
-    style: 'currency',
-    currency: 'ISK',
-    minimumFractionDigits: 0
-  }).format(amount)
+  return formatStepResultHelper(step.stepType, step.result)
 }
 </script>
 

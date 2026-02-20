@@ -43,6 +43,24 @@ public interface IGraphEmailService
         string? cc = null,
         string? bcc = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends a reply email via Graph API using delegated authentication.
+    /// </summary>
+    Task<string?> SendReplyAsync(
+        Guid? userId,
+        string fromEmail,
+        string fromName,
+        string toEmail,
+        string toName,
+        string subject,
+        string bodyHtml,
+        string? bodyText,
+        string? inReplyToMessageId,
+        string? conversationId,
+        string? cc = null,
+        string? bcc = null,
+        CancellationToken ct = default);
 }
 
 /// <summary>

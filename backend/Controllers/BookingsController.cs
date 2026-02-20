@@ -1,3 +1,4 @@
+using InnriGreifi.API.Models.DTOs;
 using InnriGreifi.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,17 +13,20 @@ public class BookingsController : ControllerBase
 {
     private readonly IBookingsScraper _scraper;
     private readonly ITableBookingService _tableBookingService;
+    private readonly IBookingManagementService _bookingManagementService;
     private readonly ILogger<BookingsController> _logger;
     private readonly IMemoryCache _cache;
 
     public BookingsController(
         IBookingsScraper scraper,
         ITableBookingService tableBookingService,
+        IBookingManagementService bookingManagementService,
         ILogger<BookingsController> logger,
         IMemoryCache cache)
     {
         _scraper = scraper;
         _tableBookingService = tableBookingService;
+        _bookingManagementService = bookingManagementService;
         _logger = logger;
         _cache = cache;
     }
@@ -118,6 +122,119 @@ public class BookingsController : ControllerBase
         {
             _logger.LogError(ex, "Error clearing cache");
             return StatusCode(500, new { error = "Error clearing cache", details = ex.Message });
+        }
+    }
+
+    // New booking management endpoints
+    [HttpGet("manage")]
+    public async Task<IActionResult> GetManagedBookings(
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] Guid? customerId = null,
+        [FromQuery] Guid? locationId = null,
+        [FromQuery] string? status = null)
+    {
+        try
+        {
+            var bookings = await _bookingManagementService.GetBookingsAsync(
+                fromDate,
+                toDate,
+                customerId,
+                locationId,
+                status);
+
+            return Ok(bookings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching managed bookings");
+            return StatusCode(500, new { error = "Error fetching bookings", details = ex.Message });
+        }
+    }
+
+    [HttpGet("manage/{id}")]
+    public async Task<IActionResult> GetManagedBooking(Guid id)
+    {
+        try
+        {
+            var booking = await _bookingManagementService.GetBookingByIdAsync(id);
+            if (booking == null)
+                return NotFound();
+
+            return Ok(booking);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching booking {BookingId}", id);
+            return StatusCode(500, new { error = "Error fetching booking", details = ex.Message });
+        }
+    }
+
+    [HttpPost("manage")]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<IActionResult> CreateBooking([FromBody] CreateBookingDto dto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var booking = await _bookingManagementService.CreateBookingAsync(dto);
+            return CreatedAtAction(nameof(GetManagedBooking), new { id = booking.Id }, booking);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating booking");
+            return StatusCode(500, new { error = "Error creating booking", details = ex.Message });
+        }
+    }
+
+    [HttpPut("manage/{id}")]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<IActionResult> UpdateBooking(Guid id, [FromBody] UpdateBookingDto dto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var booking = await _bookingManagementService.UpdateBookingAsync(id, dto);
+            if (booking == null)
+                return NotFound();
+
+            return Ok(booking);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating booking {BookingId}", id);
+            return StatusCode(500, new { error = "Error updating booking", details = ex.Message });
+        }
+    }
+
+    [HttpDelete("manage/{id}")]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<IActionResult> DeleteBooking(Guid id)
+    {
+        try
+        {
+            var deleted = await _bookingManagementService.DeleteBookingAsync(id);
+            if (!deleted)
+                return NotFound();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting booking {BookingId}", id);
+            return StatusCode(500, new { error = "Error deleting booking", details = ex.Message });
         }
     }
 }

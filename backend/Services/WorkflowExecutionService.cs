@@ -11,15 +11,18 @@ public class WorkflowExecutionService : IWorkflowExecutionService
     private readonly AppDbContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<WorkflowExecutionService> _logger;
+    private readonly IWorkflowDefinitionService _workflowDefinitionService;
 
     public WorkflowExecutionService(
         AppDbContext context,
         IServiceProvider serviceProvider,
-        ILogger<WorkflowExecutionService> logger)
+        ILogger<WorkflowExecutionService> logger,
+        IWorkflowDefinitionService workflowDefinitionService)
     {
         _context = context;
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _workflowDefinitionService = workflowDefinitionService;
     }
 
     public async Task<WorkflowInstance?> InitializeWorkflowAsync(Guid conversationId, string classification, CancellationToken ct = default)
@@ -36,11 +39,21 @@ public class WorkflowExecutionService : IWorkflowExecutionService
                 return existing;
             }
 
-            // Check if workflow exists for this classification
-            var workflowDef = WorkflowRegistry.GetWorkflowForClassification(classification);
-            if (workflowDef == null)
+            // Look up classification by name in database
+            var emailClassification = await _context.EmailClassifications
+                .FirstOrDefaultAsync(c => c.Name == classification && c.IsActive, ct);
+
+            if (emailClassification == null)
             {
-                _logger.LogDebug("No workflow defined for classification {Classification}", classification);
+                _logger.LogDebug("Classification {Classification} not found in database", classification);
+                return null;
+            }
+
+            // Check if workflow exists for this classification
+            var workflowDefDto = await _workflowDefinitionService.GetByClassificationIdAsync(emailClassification.Id, ct);
+            if (workflowDefDto == null)
+            {
+                _logger.LogDebug("No workflow defined for classification {Classification} (ID: {ClassificationId})", classification, emailClassification.Id);
                 return null;
             }
 
@@ -49,7 +62,7 @@ public class WorkflowExecutionService : IWorkflowExecutionService
             {
                 Id = Guid.NewGuid(),
                 ConversationId = conversationId,
-                WorkflowType = workflowDef.Name,
+                WorkflowType = workflowDefDto.Name,
                 State = "Pending",
                 CurrentStepIndex = 0,
                 WorkflowDataJson = "{}",
@@ -92,9 +105,11 @@ public class WorkflowExecutionService : IWorkflowExecutionService
                 return;
             }
 
-            // Get workflow definition
-            var workflowDef = WorkflowRegistry.GetWorkflowForClassification(instance.Conversation.Classification ?? string.Empty);
-            if (workflowDef == null)
+            // Get workflow definition from database by name
+            var workflowDefEntity = await _context.WorkflowDefinitions
+                .FirstOrDefaultAsync(w => w.Name == instance.WorkflowType && w.IsActive, ct);
+
+            if (workflowDefEntity == null)
             {
                 _logger.LogWarning("Workflow definition not found for type {WorkflowType}", instance.WorkflowType);
                 instance.State = "Failed";
@@ -102,6 +117,13 @@ public class WorkflowExecutionService : IWorkflowExecutionService
                 await _context.SaveChangesAsync(ct);
                 return;
             }
+
+            // Convert entity directly to model (no need for DTO service here)
+            var workflowDef = new WorkflowDefinition
+            {
+                Name = workflowDefEntity.Name,
+                Steps = workflowDefEntity.Steps // This will deserialize from StepsJson
+            };
 
             // Load workflow data
             var workflowData = DeserializeWorkflowData(instance.WorkflowDataJson);
@@ -114,10 +136,11 @@ public class WorkflowExecutionService : IWorkflowExecutionService
                 await _context.SaveChangesAsync(ct);
             }
 
-            // Execute steps starting from current index
-            for (int i = instance.CurrentStepIndex; i < workflowDef.Steps.Count; i++)
+            // Execute steps starting from current index (sort by Order to ensure correct execution order)
+            var sortedSteps = workflowDef.Steps.OrderBy(s => s.Order).ToList();
+            for (int i = instance.CurrentStepIndex; i < sortedSteps.Count; i++)
             {
-                var stepDef = workflowDef.Steps[i];
+                var stepDef = sortedSteps[i];
                 _logger.LogInformation("Executing step {StepIndex}: {StepType} for workflow {WorkflowInstanceId}",
                     i, stepDef.StepType, workflowInstanceId);
 

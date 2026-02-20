@@ -584,9 +584,10 @@ public class EmailInboxController : ControllerBase
             // Convert HTML body to text if needed (for bodyText parameter)
             var bodyText = StripHtmlTags(replyBody);
 
-            // Send the reply via Graph API
+            // Send the reply via Graph API using delegated authentication
             // Always reply to the customer (conversation.FromEmail) - AI messages are just context
             var sentMessageId = await _graphService.SendReplyAsync(
+                userId: currentUser.Id,
                 fromEmail: emailMapping.EmailAddress,
                 fromName: emailMapping.DisplayName ?? currentUser.Name,
                 toEmail: conversation.FromEmail, // Customer's email

@@ -3,6 +3,7 @@ using InnriGreifi.API.Models;
 using InnriGreifi.API.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +48,12 @@ builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
     
     // User settings
     options.User.RequireUniqueEmail = false;
+    
+    // Claims settings - ensure roles are included in the authentication cookie
+    options.ClaimsIdentity.RoleClaimType = ClaimTypes.Role;
+    // Ensure roles are included in the user's claims
+    options.ClaimsIdentity.UserIdClaimType = ClaimTypes.NameIdentifier;
+    options.ClaimsIdentity.UserNameClaimType = ClaimTypes.Name;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -55,6 +62,25 @@ builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "InnriGreifi.Auth";
+    
+    // Ensure role claims are included in the cookie
+    options.Events.OnSigningIn = async context =>
+    {
+        var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<User>>();
+        var user = await userManager.GetUserAsync(context.Principal);
+        if (user != null)
+        {
+            var roles = await userManager.GetRolesAsync(user);
+            var identity = (ClaimsIdentity)context.Principal.Identity!;
+            foreach (var role in roles)
+            {
+                if (!identity.HasClaim(ClaimTypes.Role, role))
+                {
+                    identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                }
+            }
+        }
+    };
     
     // Check if we should allow HTTP cookies (for internal deployments without HTTPS)
     var allowHttpCookies = builder.Configuration.GetValue<bool>("Authentication:AllowHttpCookies", false);
@@ -132,6 +158,9 @@ builder.Services.Configure<InnriGreifi.API.Models.OrderLateRulesOptions>(
 builder.Services.AddScoped<IInvoiceParser, HtmlInvoiceParser>();
 builder.Services.AddScoped<ISupplierProductService, SupplierProductService>();
 builder.Services.AddScoped<IOrderImportService, OrderImportService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<IBookingManagementService, BookingManagementService>();
 builder.Services.AddScoped<IOrderReportingService, OrderReportingService>();
 builder.Services.AddScoped<IGiftCardNumberService, GiftCardNumberService>();
 builder.Services.AddScoped<IGiftCardService, GiftCardService>();
@@ -141,6 +170,7 @@ builder.Services.AddScoped<OrderLateRules>();
 
 // Email Receptionist Services
 // Register email services conditionally - they will handle missing configuration gracefully
+builder.Services.AddScoped<IMicrosoftOAuthService, MicrosoftOAuthService>();
 builder.Services.AddScoped<IGraphEmailService, GraphEmailService>();
 builder.Services.AddScoped<IEmailClassificationService, EmailClassificationService>();
 builder.Services.AddScoped<IEmailClassificationQueueService, EmailClassificationQueueService>();
@@ -161,6 +191,7 @@ else
 
 // Workflow Services
 builder.Services.AddScoped<IWorkflowExecutionService, WorkflowExecutionService>();
+builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.OrderLookupStepHandler>();
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.OrderVerificationStepHandler>();
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.CreditCalculationStepHandler>();
@@ -168,6 +199,8 @@ builder.Services.AddScoped<InnriGreifi.API.Services.Steps.ResponseDraftStepHandl
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.ApprovalStepHandler>();
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.CreditIssuanceStepHandler>();
 builder.Services.AddScoped<InnriGreifi.API.Services.Steps.EmailSendStepHandler>();
+builder.Services.AddScoped<InnriGreifi.API.Services.Steps.BookingAvailabilityCheckStepHandler>();
+builder.Services.AddScoped<InnriGreifi.API.Services.Steps.BookingResponseDraftStepHandler>();
 
 // HttpClient for web scraping and Pushover
 builder.Services.AddHttpClient<IWaitTimeScraper, WaitTimeScraper>()
@@ -227,8 +260,9 @@ app.MapControllers();
 // Seed database
 await SeedDatabaseAsync(app);
 
-// Register workflows
-WorkflowRegistry.RegisterWorkflow(CreditIssuanceWorkflowDefinition.GetDefinition());
+// Register workflows (DEPRECATED - workflows are now stored in database)
+// This is kept for backward compatibility during migration
+// WorkflowRegistry.RegisterWorkflow(CreditIssuanceWorkflowDefinition.GetDefinition(), "Complaint");
 
 app.Run();
 
@@ -267,7 +301,7 @@ async Task SeedDatabaseAsync(WebApplication app)
     }
     
     // Seed roles
-    var roles = new[] { "Admin", "Manager", "User" };
+    var roles = new[] { "Admin", "Manager", "User", "SystemAdmin" };
     foreach (var roleName in roles)
     {
         if (!await roleManager.RoleExistsAsync(roleName))

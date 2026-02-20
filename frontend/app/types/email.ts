@@ -66,3 +66,27 @@ export interface EmailExtractedDataDto {
   extractedAt: string
 }
 
+export interface EmailConnectionDto {
+  deviceCode: string
+  verificationUrl: string
+  expiresIn: number
+  interval: number
+}
+
+export interface EmailConnectionStatusDto {
+  emailAddress: string
+  isConnected: boolean
+  isSystemInbox: boolean
+  lastRefreshedAt?: string
+}
+
+export interface ConnectEmailRequestDto {
+  emailAddress: string
+  isSystemInbox: boolean
+}
+
+export interface PollTokenResponseDto {
+  success: boolean
+  emailAddress?: string
+}
+
