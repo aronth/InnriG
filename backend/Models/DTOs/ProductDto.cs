@@ -7,6 +7,8 @@ public class ProductListDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? CurrentUnit { get; set; }
+    public decimal? NormalizedUnitMultiplier { get; set; }
+    public string? NormalizedBaseUnit { get; set; }
     public Guid SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;
     
@@ -38,6 +40,19 @@ public class ProductLookupDto
     public decimal? LatestPrice { get; set; }
 }
 
+/// <summary>DTO for updating a product; no navigation properties to avoid validation errors.</summary>
+public class UpdateProductDto
+{
+    public Guid Id { get; set; }
+    public Guid SupplierId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? CurrentUnit { get; set; }
+    public decimal? NormalizedUnitMultiplier { get; set; }
+    public string? NormalizedBaseUnit { get; set; }
+}
+
 public class MostOrderedProductDto
 {
     public Guid ProductId { get; set; }
@@ -48,6 +63,23 @@ public class MostOrderedProductDto
     public string? Unit { get; set; }
     public decimal TotalQuantity { get; set; }
     public int OrderCount { get; set; } // Number of times this product was ordered
+    public decimal? AverageUnitPrice { get; set; }
+    public decimal? LatestUnitPrice { get; set; }
+}
+
+/// <summary>DTO for highest spending report: products ranked by total spending (sum of invoice line TotalPrice) in a date range.</summary>
+public class HighestSpendingProductDto
+{
+    public Guid ProductId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public Guid SupplierId { get; set; }
+    public string SupplierName { get; set; } = string.Empty;
+    public string? Unit { get; set; }
+    /// <summary>Sum of InvoiceItem.TotalPrice within the period (reflects actual prices at time of purchase).</summary>
+    public decimal TotalSpending { get; set; }
+    public decimal TotalQuantity { get; set; }
+    public int OrderCount { get; set; }
     public decimal? AverageUnitPrice { get; set; }
     public decimal? LatestUnitPrice { get; set; }
 }

@@ -6,7 +6,7 @@
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8 4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
           </div>
           <div>
@@ -24,16 +24,27 @@
             </p>
           </div>
         </div>
-        <button
-          @click="handleExport"
-          :disabled="isLoading"
-          class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Sækja CSV
-        </button>
+        <div class="flex items-center gap-3">
+          <NuxtLink
+            :to="normalizeLink"
+            class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 shadow-sm font-medium"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+            Stilla einingar
+          </NuxtLink>
+          <button
+            @click="handleExport"
+            :disabled="isLoading"
+            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Sækja CSV
+          </button>
+        </div>
       </div>
 
       <!-- Search and Filters -->
@@ -82,6 +93,20 @@
             <option value="">Allir birgjar</option>
             <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">
               {{ supplier.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Buyer Filter -->
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kaupandi</label>
+          <select
+            v-model="filters.buyerId"
+            class="w-full px-4 py-2 border border-indigo-200 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          >
+            <option value="">Allir kaupendur</option>
+            <option v-for="buyer in buyers" :key="buyer.id" :value="buyer.id">
+              {{ buyer.name || 'Nafnlaus' }} ({{ buyer.taxId || '-' }})
             </option>
           </select>
         </div>
@@ -227,6 +252,9 @@
                 </div>
               </th>
               <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Einingarverð
+              </th>
+              <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
               </th>
             </tr>
           </thead>
@@ -262,6 +290,18 @@
                   {{ formatPrice(product.latestPrice) }}
                 </div>
                 <div v-else class="text-xs text-gray-400">-</div>
+              </td>
+              <td
+                class="px-3 py-2 whitespace-nowrap text-right cursor-pointer hover:bg-indigo-100 rounded transition-colors"
+                @click="openEditUnitModal(product)"
+                title="Smella til að stilla einingu og margfaldara"
+              >
+                <div v-if="normalizedUnitPrice(product)" class="text-sm font-medium text-gray-800">
+                  {{ formatPrice(normalizedUnitPrice(product)!) }} kr / {{ product.normalizedBaseUnit }}
+                </div>
+                <div v-else class="text-xs text-gray-400">
+                  <span class="underline decoration-dashed">Stilla</span>
+                </div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-right">
                 <div class="flex items-center justify-end gap-2">
@@ -350,17 +390,17 @@
         </svg>
       </div>
       <h3 class="text-xl font-bold text-gray-700 mb-2">
-        {{ filters.search || filters.supplierId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined
+        {{ filters.search || filters.supplierId || filters.buyerId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined
           ? 'Engar vörur fundust með þessum síum'
           : 'Engar vörur fundust' }}
       </h3>
       <p class="text-gray-500">
-        {{ filters.search || filters.supplierId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined
+        {{ filters.search || filters.supplierId || filters.buyerId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined
           ? 'Reyndu að breyta síunum eða leit.'
           : 'Byrjaðu að lesa inn reikninga til að sjá vörur hér.' }}
       </p>
       <button
-        v-if="filters.search || filters.supplierId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined"
+        v-if="filters.search || filters.supplierId || filters.buyerId || filters.minPrice !== undefined || filters.maxPrice !== undefined || filters.hasPrice !== undefined"
         @click="clearFilters"
         class="inline-block mt-6 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
       >
@@ -373,6 +413,63 @@
       >
         Lesa inn reikning
       </NuxtLink>
+    </div>
+
+    <!-- Edit unit / multiplier modal -->
+    <div v-if="editingProduct" class="fixed z-50 inset-0 overflow-y-auto" @click.self="closeEditUnitModal">
+      <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeEditUnitModal" />
+        <div class="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6" @click.stop>
+          <h3 class="text-lg font-bold text-gray-900 mb-2">Stilling eininga</h3>
+          <p class="text-sm text-gray-600 mb-4">{{ editingProduct.name }}</p>
+          <p v-if="editingProduct.latestPrice != null" class="text-xs text-gray-500 mb-4">
+            Einingarverð: {{ formatPrice(editingProduct.latestPrice) }} kr
+          </p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Margfaldari</label>
+              <input
+                v-model="editMultiplierStr"
+                type="text"
+                inputmode="decimal"
+                placeholder="t.d. 0,1"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Eining</label>
+              <select
+                v-model="editBaseUnit"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="">—</option>
+                <option value="kg">kg</option>
+                <option value="L">L</option>
+                <option value="m">m</option>
+                <option value="stk">stk</option>
+              </select>
+            </div>
+            <div v-if="editPreview != null" class="p-3 bg-indigo-50 rounded-lg text-sm text-indigo-800">
+              Einingarverð: {{ formatPrice(editPreview) }} kr / {{ editBaseUnit || '—' }}
+            </div>
+          </div>
+          <div class="flex gap-3 mt-6">
+            <button
+              :disabled="savingUnit"
+              class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
+              @click="saveEditUnit"
+            >
+              {{ savingUnit ? 'Vista...' : 'Vista' }}
+            </button>
+            <button
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+              @click="closeEditUnitModal"
+            >
+              Hætta við
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Delete Confirmation Modal -->
@@ -425,11 +522,14 @@
 <script setup lang="ts">
 const route = useRoute()
 const router = useRouter()
-const { getAllProducts, lookupProducts, deleteProduct, exportToCsv } = useProducts()
+const { getAllProducts, lookupProducts, deleteProduct, exportToCsv, updateProduct } = useProducts()
 const { getAllSuppliers } = useSuppliers()
+const { parseDecimal, formatDecimalForInput } = useDecimalInput()
+const { getAllBuyers } = useBuyers()
 
 const paginatedData = ref<Awaited<ReturnType<typeof getAllProducts>> | null>(null)
 const suppliers = ref<any[]>([])
+const buyers = ref<any[]>([])
 const searchSuggestions = ref<Awaited<ReturnType<typeof lookupProducts>>>([])
 const showSuggestions = ref(false)
 const isLoading = ref(true)
@@ -442,6 +542,7 @@ let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 // Filters
 const filters = ref<{
   supplierId?: string
+  buyerId?: string
   search?: string
   minPrice?: number
   maxPrice?: number
@@ -452,6 +553,7 @@ const filters = ref<{
   pageSize?: number
 }>({
   supplierId: '',
+  buyerId: '',
   search: '',
   minPrice: undefined,
   maxPrice: undefined,
@@ -466,6 +568,7 @@ const filters = ref<{
 const initializeFromQuery = () => {
   const query = route.query
   if (query.supplierId) filters.value.supplierId = query.supplierId as string
+  if (query.buyerId) filters.value.buyerId = query.buyerId as string
   if (query.search) filters.value.search = query.search as string
   if (query.minPrice) filters.value.minPrice = parseFloat(query.minPrice as string)
   if (query.maxPrice) filters.value.maxPrice = parseFloat(query.maxPrice as string)
@@ -480,6 +583,7 @@ const initializeFromQuery = () => {
 const updateQueryParams = () => {
   const query: Record<string, string> = {}
   if (filters.value.supplierId) query.supplierId = filters.value.supplierId
+  if (filters.value.buyerId) query.buyerId = filters.value.buyerId
   if (filters.value.search) query.search = filters.value.search
   if (filters.value.minPrice !== undefined) query.minPrice = filters.value.minPrice.toString()
   if (filters.value.maxPrice !== undefined) query.maxPrice = filters.value.maxPrice.toString()
@@ -498,14 +602,18 @@ const fetchData = async () => {
   error.value = ''
   
   try {
-    // Fetch suppliers first if we don't have them
+    // Fetch suppliers and buyers if we don't have them
     if (suppliers.value.length === 0) {
       suppliers.value = await getAllSuppliers()
+    }
+    if (buyers.value.length === 0) {
+      buyers.value = await getAllBuyers()
     }
     
     // Build filters object, removing undefined values
     const filterParams: {
       supplierId?: string
+      buyerId?: string
       search?: string
       minPrice?: number
       maxPrice?: number
@@ -522,6 +630,7 @@ const fetchData = async () => {
     }
     
     if (filters.value.supplierId) filterParams.supplierId = filters.value.supplierId
+    if (filters.value.buyerId) filterParams.buyerId = filters.value.buyerId
     if (filters.value.search) filterParams.search = filters.value.search
     if (filters.value.minPrice !== undefined) filterParams.minPrice = filters.value.minPrice
     if (filters.value.maxPrice !== undefined) filterParams.maxPrice = filters.value.maxPrice
@@ -609,6 +718,7 @@ const goToPage = (page: number) => {
 const clearFilters = () => {
   filters.value = {
     supplierId: '',
+    buyerId: '',
     search: '',
     minPrice: undefined,
     maxPrice: undefined,
@@ -622,6 +732,14 @@ const clearFilters = () => {
   updateQueryParams()
   fetchData()
 }
+
+// Link to normalize units flow (only products without multiplier, optional supplier)
+const normalizeLink = computed(() => {
+  const query: Record<string, string> = { hasMultiplier: 'false', pageSize: '10000' }
+  if (filters.value.supplierId) query.supplierId = filters.value.supplierId
+  if (filters.value.buyerId) query.buyerId = filters.value.buyerId
+  return { path: '/products/catalog/normalize', query }
+})
 
 // Calculate visible page numbers for pagination
 const visiblePages = computed(() => {
@@ -671,7 +789,56 @@ watch(() => route.query, () => {
   fetchData()
 }, { deep: true })
 
-// Fetch on mount
+// Edit unit modal
+const editingProduct = ref<Awaited<ReturnType<typeof getAllProducts>>['items'][0] | null>(null)
+const editMultiplierStr = ref('')
+const editBaseUnit = ref('')
+const savingUnit = ref(false)
+
+const editPreview = computed(() => {
+  if (!editingProduct.value || editingProduct.value.latestPrice == null) return null
+  const m = parseDecimal(editMultiplierStr.value)
+  if (m == null) return null
+  return editingProduct.value.latestPrice * m
+})
+
+function openEditUnitModal(product: Awaited<ReturnType<typeof getAllProducts>>['items'][0]) {
+  editingProduct.value = product
+  editMultiplierStr.value = product.normalizedUnitMultiplier != null ? formatDecimalForInput(product.normalizedUnitMultiplier) : ''
+  editBaseUnit.value = product.normalizedBaseUnit ?? ''
+}
+
+function closeEditUnitModal() {
+  editingProduct.value = null
+}
+
+async function saveEditUnit() {
+  if (!editingProduct.value || savingUnit.value) return
+  const p = editingProduct.value
+  const mult = parseDecimal(editMultiplierStr.value)
+  const payload = {
+    id: p.id,
+    supplierId: p.supplierId,
+    productCode: p.productCode,
+    name: p.name,
+    description: p.description ?? null,
+    currentUnit: p.currentUnit ?? null,
+    normalizedUnitMultiplier: mult,
+    normalizedBaseUnit: editBaseUnit.value || null
+  }
+  savingUnit.value = true
+  try {
+    await updateProduct(p.id, payload)
+    p.normalizedUnitMultiplier = mult ?? undefined
+    p.normalizedBaseUnit = editBaseUnit.value || undefined
+    closeEditUnitModal()
+  } catch (e: any) {
+    alert(e?.data?.message || e?.message || 'Villa við að vista')
+  } finally {
+    savingUnit.value = false
+  }
+}
+
 // Delete modal
 const showDeleteModal = ref(false)
 const isDeleting = ref(false)
@@ -708,6 +875,11 @@ const formatPrice = (price: number) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2 
   }).format(price)
+}
+
+const normalizedUnitPrice = (product: { latestPrice?: number; normalizedUnitMultiplier?: number; normalizedBaseUnit?: string }) => {
+  if (product.latestPrice == null || product.normalizedUnitMultiplier == null || !product.normalizedBaseUnit) return null
+  return product.latestPrice * product.normalizedUnitMultiplier
 }
 
 const formatPercent = (percent: number) => {

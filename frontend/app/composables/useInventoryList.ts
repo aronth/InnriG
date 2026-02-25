@@ -15,9 +15,10 @@ export const useInventoryList = () => {
   const apiBase = config.public.apiBase
   const { apiFetch } = useApi()
 
-  const getUnifiedList = async (supplierId?: string, search?: string): Promise<UnifiedInventoryListItem[]> => {
+  const getUnifiedList = async (supplierId?: string, buyerId?: string, search?: string): Promise<UnifiedInventoryListItem[]> => {
     const params = new URLSearchParams()
     if (supplierId) params.append('supplierId', supplierId)
+    if (buyerId) params.append('buyerId', buyerId)
     if (search) params.append('search', search)
 
     return await apiFetch<UnifiedInventoryListItem[]>(
@@ -25,9 +26,10 @@ export const useInventoryList = () => {
     )
   }
 
-  const exportToCsv = async (supplierId?: string, search?: string) => {
+  const exportToCsv = async (supplierId?: string, buyerId?: string, search?: string) => {
     const params = new URLSearchParams()
     if (supplierId) params.append('supplierId', supplierId)
+    if (buyerId) params.append('buyerId', buyerId)
     if (search) params.append('search', search)
 
     const response = await fetch(

@@ -34,6 +34,25 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
+          Kaupandi
+        </label>
+        <select
+          v-model="selectedBuyerId"
+          @change="loadData"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md"
+        >
+          <option value="">Allir kaupendur</option>
+          <option
+            v-for="buyer in buyers"
+            :key="buyer.id"
+            :value="buyer.id"
+          >
+            {{ buyer.name || 'Nafnlaus' }} ({{ buyer.taxId }})
+          </option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">
           Leita
         </label>
         <input
@@ -141,12 +160,15 @@ import type { UnifiedInventoryListItem } from '~/app/composables/useInventoryLis
 
 const { getUnifiedList, exportToCsv } = useInventoryList()
 const { getAllSuppliers } = useSuppliers()
+const { getAllBuyers } = useBuyers()
 
 const items = ref<UnifiedInventoryListItem[]>([])
 const suppliers = ref<any[]>([])
+const buyers = ref<any[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const selectedSupplierId = ref('')
+const selectedBuyerId = ref('')
 const searchQuery = ref('')
 
 let searchTimeout: NodeJS.Timeout | null = null
@@ -166,6 +188,7 @@ const loadData = async () => {
     error.value = null
     items.value = await getUnifiedList(
       selectedSupplierId.value || undefined,
+      selectedBuyerId.value || undefined,
       searchQuery.value || undefined
     )
   } catch (e: any) {
@@ -180,6 +203,7 @@ const handleExport = async () => {
   try {
     await exportToCsv(
       selectedSupplierId.value || undefined,
+      selectedBuyerId.value || undefined,
       searchQuery.value || undefined
     )
   } catch (e: any) {
@@ -208,11 +232,13 @@ const formatDate = (dateString: string) => {
 
 onMounted(async () => {
   try {
-    suppliers.value = await getAllSuppliers()
+    const [supplierList, buyerList] = await Promise.all([getAllSuppliers(), getAllBuyers()])
+    suppliers.value = supplierList
+    buyers.value = buyerList
     await loadData()
   } catch (e: any) {
     error.value = e.message || 'Villa við að sækja birgja'
-    console.error('Error loading suppliers:', e)
+    console.error('Error loading suppliers/buyers:', e)
   }
 })
 </script>

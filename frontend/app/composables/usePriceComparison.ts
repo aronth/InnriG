@@ -48,12 +48,14 @@ export const usePriceComparison = () => {
   const getPriceComparison = async (
     fromDate: string,
     toDate: string,
-    supplierId?: string
+    supplierId?: string,
+    buyerId?: string
   ): Promise<PriceComparisonResponse> => {
     const params = new URLSearchParams()
     params.append('fromDate', fromDate)
     params.append('toDate', toDate)
     if (supplierId) params.append('supplierId', supplierId)
+    if (buyerId) params.append('buyerId', buyerId)
 
     return await apiFetch<PriceComparisonResponse>(
       `${apiBase}/api/products/price-comparison?${params.toString()}`
@@ -63,12 +65,14 @@ export const usePriceComparison = () => {
   const exportToCsv = async (
     fromDate: string,
     toDate: string,
-    supplierId?: string
+    supplierId?: string,
+    buyerId?: string
   ) => {
     const params = new URLSearchParams()
     params.append('fromDate', fromDate)
     params.append('toDate', toDate)
     if (supplierId) params.append('supplierId', supplierId)
+    if (buyerId) params.append('buyerId', buyerId)
 
     const response = await fetch(
       `${apiBase}/api/products/price-comparison/export?${params.toString()}`,

@@ -23,10 +23,12 @@ public class ProductsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] string? search = null,
         [FromQuery] decimal? minPrice = null,
         [FromQuery] decimal? maxPrice = null,
         [FromQuery] bool? hasPrice = null,
+        [FromQuery] bool? hasMultiplier = null,
         [FromQuery] string? sortBy = "supplierName",
         [FromQuery] string? sortOrder = "asc",
         [FromQuery] int page = 1,
@@ -37,10 +39,14 @@ public class ProductsController : ControllerBase
         if (pageSize < 1) pageSize = 1;
         if (pageSize > 10000) pageSize = 10000; // Limit max page size (allows listing all products)
 
-        // Build base query with latest invoice items
+        var invoiceItemsQuery = _context.InvoiceItems.Include(ii => ii.Invoice).AsQueryable();
+        if (buyerId.HasValue)
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
+        // Build base query with latest invoice items (optionally scoped to buyer)
         var baseQuery = _context.Products
             .GroupJoin(
-                _context.InvoiceItems.Include(ii => ii.Invoice),
+                invoiceItemsQuery,
                 p => p.Id,
                 ii => ii.ProductId,
                 (product, items) => new
@@ -55,6 +61,8 @@ public class ProductsController : ControllerBase
                 Name = p.Product.Name,
                 Description = p.Product.Description,
                 CurrentUnit = p.Product.CurrentUnit,
+                NormalizedUnitMultiplier = p.Product.NormalizedUnitMultiplier,
+                NormalizedBaseUnit = p.Product.NormalizedBaseUnit,
                 SupplierId = p.Product.SupplierId,
                 SupplierName = p.Product.Supplier.Name,
                 LatestPrice = p.LatestItem != null ? p.LatestItem.UnitPrice : null,
@@ -99,6 +107,23 @@ public class ProductsController : ControllerBase
             {
                 baseQuery = baseQuery.Where(p => !p.LatestPrice.HasValue);
             }
+        }
+
+        if (hasMultiplier.HasValue)
+        {
+            if (hasMultiplier.Value)
+            {
+                baseQuery = baseQuery.Where(p => p.NormalizedUnitMultiplier != null);
+            }
+            else
+            {
+                baseQuery = baseQuery.Where(p => p.NormalizedUnitMultiplier == null);
+            }
+        }
+
+        if (buyerId.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice != null);
         }
 
         // Apply sorting
@@ -349,14 +374,20 @@ public class ProductsController : ControllerBase
     [HttpGet("unified-inventory-list")]
     public async Task<IActionResult> GetUnifiedInventoryList(
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] string? search = null)
     {
+        var invoiceItemsQuery = _context.InvoiceItems
+            .Include(ii => ii.Invoice)
+            .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+            .AsQueryable();
+        if (buyerId.HasValue)
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
         var query = _context.Products
             .Include(p => p.Supplier)
             .GroupJoin(
-                _context.InvoiceItems
-                    .Include(ii => ii.Invoice)
-                    .OrderByDescending(ii => ii.Invoice.InvoiceDate),
+                invoiceItemsQuery,
                 p => p.Id,
                 ii => ii.ProductId,
                 (product, items) => new
@@ -364,7 +395,7 @@ public class ProductsController : ControllerBase
                     Product = product,
                     LatestItem = items.FirstOrDefault()
                 })
-            .Where(x => x.LatestItem != null); // Only products with purchase history
+            .Where(x => x.LatestItem != null); // Only products with purchase history (and for buyer when buyerId set)
 
         // Apply filters
         if (supplierId.HasValue)
@@ -405,14 +436,20 @@ public class ProductsController : ControllerBase
     [HttpGet("unified-inventory-list/export")]
     public async Task<IActionResult> ExportUnifiedInventoryList(
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] string? search = null)
     {
+        var invoiceItemsQuery = _context.InvoiceItems
+            .Include(ii => ii.Invoice)
+            .OrderByDescending(ii => ii.Invoice.InvoiceDate)
+            .AsQueryable();
+        if (buyerId.HasValue)
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
         var query = _context.Products
             .Include(p => p.Supplier)
             .GroupJoin(
-                _context.InvoiceItems
-                    .Include(ii => ii.Invoice)
-                    .OrderByDescending(ii => ii.Invoice.InvoiceDate),
+                invoiceItemsQuery,
                 p => p.Id,
                 ii => ii.ProductId,
                 (product, items) => new
@@ -507,7 +544,8 @@ public class ProductsController : ControllerBase
     public async Task<IActionResult> GetPriceComparison(
         [FromQuery] DateTime fromDate,
         [FromQuery] DateTime toDate,
-        [FromQuery] Guid? supplierId = null)
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null)
     {
         // Convert dates to UTC (query parameters come as Unspecified)
         var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
@@ -539,17 +577,21 @@ public class ProductsController : ControllerBase
 
         var comparisonResults = new List<PriceComparisonDto>();
 
+        IQueryable<InvoiceItem> priceCompItemsBase = _context.InvoiceItems.AsQueryable();
+        if (buyerId.HasValue)
+            priceCompItemsBase = priceCompItemsBase.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
         foreach (var product in products)
         {
             // Find closest invoice item to fromDate (before or on that date)
-            var fromItem = await _context.InvoiceItems
+            var fromItem = await priceCompItemsBase
                 .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= fromDateUtc)
                 .Include(ii => ii.Invoice)
                 .OrderByDescending(ii => ii.Invoice.InvoiceDate)
                 .FirstOrDefaultAsync();
 
             // Find closest invoice item to toDate (before or on that date)
-            var toItem = await _context.InvoiceItems
+            var toItem = await priceCompItemsBase
                 .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= toDateUtc)
                 .Include(ii => ii.Invoice)
                 .OrderByDescending(ii => ii.Invoice.InvoiceDate)
@@ -639,7 +681,8 @@ public class ProductsController : ControllerBase
     public async Task<IActionResult> ExportPriceComparison(
         [FromQuery] DateTime fromDate,
         [FromQuery] DateTime toDate,
-        [FromQuery] Guid? supplierId = null)
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null)
     {
         // Convert dates to UTC (query parameters come as Unspecified)
         var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
@@ -671,17 +714,21 @@ public class ProductsController : ControllerBase
 
         var comparisonResults = new List<PriceComparisonDto>();
 
+        IQueryable<InvoiceItem> exportPriceCompItemsBase = _context.InvoiceItems.AsQueryable();
+        if (buyerId.HasValue)
+            exportPriceCompItemsBase = exportPriceCompItemsBase.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
         foreach (var product in products)
         {
             // Find closest invoice item to fromDate (before or on that date)
-            var fromItem = await _context.InvoiceItems
+            var fromItem = await exportPriceCompItemsBase
                 .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= fromDateUtc)
                 .Include(ii => ii.Invoice)
                 .OrderByDescending(ii => ii.Invoice.InvoiceDate)
                 .FirstOrDefaultAsync();
 
             // Find closest invoice item to toDate (before or on that date)
-            var toItem = await _context.InvoiceItems
+            var toItem = await exportPriceCompItemsBase
                 .Where(ii => ii.ProductId == product.Id && ii.Invoice.InvoiceDate <= toDateUtc)
                 .Include(ii => ii.Invoice)
                 .OrderByDescending(ii => ii.Invoice.InvoiceDate)
@@ -786,15 +833,20 @@ public class ProductsController : ControllerBase
     [HttpGet("export")]
     public async Task<IActionResult> ExportProducts(
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] string? search = null,
         [FromQuery] decimal? minPrice = null,
         [FromQuery] decimal? maxPrice = null,
         [FromQuery] bool? hasPrice = null)
     {
+        var exportInvoiceItemsQuery = _context.InvoiceItems.Include(ii => ii.Invoice).AsQueryable();
+        if (buyerId.HasValue)
+            exportInvoiceItemsQuery = exportInvoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
         // Build base query with latest invoice items (same logic as GetProducts)
         var baseQuery = _context.Products
             .GroupJoin(
-                _context.InvoiceItems.Include(ii => ii.Invoice),
+                exportInvoiceItemsQuery,
                 p => p.Id,
                 ii => ii.ProductId,
                 (product, items) => new
@@ -816,6 +868,11 @@ public class ProductsController : ControllerBase
                 Discount = p.LatestItem != null ? p.LatestItem.Discount : (decimal?)null,
                 LastPurchaseDate = p.LatestItem != null ? p.LatestItem.Invoice.InvoiceDate : (DateTime?)null
             });
+
+        if (buyerId.HasValue)
+        {
+            baseQuery = baseQuery.Where(p => p.LatestPrice != null);
+        }
 
         // Apply filters (same as GetProducts)
         if (supplierId.HasValue)
@@ -924,17 +981,26 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateProduct(Guid id, [FromBody] Product product)
+    public async Task<IActionResult> UpdateProduct(Guid id, [FromBody] UpdateProductDto dto)
     {
-        if (id != product.Id)
+        if (id != dto.Id)
             return BadRequest("ID mismatch");
 
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
+        var product = await _context.Products.FindAsync(id);
+        if (product == null)
+            return NotFound();
+
+        product.SupplierId = dto.SupplierId;
+        product.ProductCode = dto.ProductCode;
+        product.Name = dto.Name;
+        product.Description = dto.Description;
+        product.CurrentUnit = dto.CurrentUnit;
+        product.NormalizedUnitMultiplier = dto.NormalizedUnitMultiplier;
+        product.NormalizedBaseUnit = dto.NormalizedBaseUnit;
         product.UpdatedAt = DateTime.UtcNow;
-        
-        _context.Entry(product).State = EntityState.Modified;
 
         try
         {
@@ -981,6 +1047,7 @@ public class ProductsController : ControllerBase
         [FromQuery] DateTime fromDate,
         [FromQuery] DateTime toDate,
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] int limit = 50)
     {
         // Convert dates to UTC (query parameters come as Unspecified)
@@ -1014,6 +1081,11 @@ public class ProductsController : ControllerBase
         if (supplierId.HasValue)
         {
             invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        }
+
+        if (buyerId.HasValue)
+        {
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
         }
 
         // Select and flatten all needed properties before grouping
@@ -1074,6 +1146,7 @@ public class ProductsController : ControllerBase
         [FromQuery] DateTime fromDate,
         [FromQuery] DateTime toDate,
         [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
         [FromQuery] int limit = 500)
     {
         // Convert dates to UTC (query parameters come as Unspecified)
@@ -1100,17 +1173,21 @@ public class ProductsController : ControllerBase
         if (limit > 500) limit = 500;
 
         // Query invoice items within the date range - flatten the query first
-        var invoiceItemsQuery = _context.InvoiceItems
+        var exportMostOrderedItemsQuery = _context.InvoiceItems
             .Where(ii => ii.Invoice.InvoiceDate >= fromDateUtc && ii.Invoice.InvoiceDate <= toDateUtc);
 
-        // Apply supplier filter if provided
         if (supplierId.HasValue)
         {
-            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+            exportMostOrderedItemsQuery = exportMostOrderedItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        }
+
+        if (buyerId.HasValue)
+        {
+            exportMostOrderedItemsQuery = exportMostOrderedItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
         }
 
         // Select and flatten all needed properties before grouping
-        var flattenedItems = await invoiceItemsQuery
+        var flattenedItems = await exportMostOrderedItemsQuery
             .Select(ii => new
             {
                 ii.ProductId,
@@ -1191,6 +1268,213 @@ public class ProductsController : ControllerBase
             rank++;
         }
         
+        return csv.ToString();
+    }
+
+    // Get highest spending products by total amount spent in a given timeframe (uses actual line TotalPrice)
+    [HttpGet("highest-spending")]
+    public async Task<IActionResult> GetHighestSpendingProducts(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
+        [FromQuery] int limit = 50)
+    {
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        toDateUtc = toDateUtc.Date.AddDays(1).AddTicks(-1);
+
+        if (limit < 1) limit = 1;
+        if (limit > 500) limit = 500;
+
+        var invoiceItemsQuery = _context.InvoiceItems
+            .Where(ii => ii.Invoice.InvoiceDate >= fromDateUtc && ii.Invoice.InvoiceDate <= toDateUtc);
+
+        if (supplierId.HasValue)
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        if (buyerId.HasValue)
+            invoiceItemsQuery = invoiceItemsQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
+        var flattenedItems = await invoiceItemsQuery
+            .Select(ii => new
+            {
+                ii.ProductId,
+                ProductCode = ii.Product.ProductCode,
+                ProductName = ii.Product.Name,
+                SupplierId = ii.Product.SupplierId,
+                SupplierName = ii.Product.Supplier.Name,
+                ProductUnit = ii.Product.CurrentUnit ?? "",
+                ii.Quantity,
+                ii.UnitPrice,
+                ii.TotalPrice,
+                ii.Unit,
+                InvoiceDate = ii.Invoice.InvoiceDate
+            })
+            .ToListAsync();
+
+        var highestSpending = flattenedItems
+            .GroupBy(x => new
+            {
+                x.ProductId,
+                x.ProductCode,
+                x.ProductName,
+                x.SupplierId,
+                x.SupplierName,
+                x.ProductUnit
+            })
+            .Select(g => new HighestSpendingProductDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductCode = g.Key.ProductCode,
+                ProductName = g.Key.ProductName,
+                SupplierId = g.Key.SupplierId,
+                SupplierName = g.Key.SupplierName,
+                Unit = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => x.Unit ?? g.Key.ProductUnit)
+                    .FirstOrDefault() ?? g.Key.ProductUnit,
+                TotalSpending = g.Sum(x => x.TotalPrice),
+                TotalQuantity = g.Sum(x => x.Quantity),
+                OrderCount = g.Count(),
+                AverageUnitPrice = g.Average(x => x.UnitPrice),
+                LatestUnitPrice = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => (decimal?)x.UnitPrice)
+                    .FirstOrDefault()
+            })
+            .OrderByDescending(p => p.TotalSpending)
+            .Take(limit)
+            .ToList();
+
+        return Ok(highestSpending);
+    }
+
+    [HttpGet("highest-spending/export")]
+    public async Task<IActionResult> ExportHighestSpendingProducts(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? supplierId = null,
+        [FromQuery] Guid? buyerId = null,
+        [FromQuery] int limit = 500)
+    {
+        var fromDateUtc = fromDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)
+            : fromDate.Kind == DateTimeKind.Local
+                ? fromDate.ToUniversalTime()
+                : fromDate;
+
+        var toDateUtc = toDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(toDate, DateTimeKind.Utc)
+            : toDate.Kind == DateTimeKind.Local
+                ? toDate.ToUniversalTime()
+                : toDate;
+
+        if (fromDateUtc >= toDateUtc)
+            return BadRequest("fromDate must be before toDate");
+
+        toDateUtc = toDateUtc.Date.AddDays(1).AddTicks(-1);
+
+        if (limit < 1) limit = 1;
+        if (limit > 500) limit = 500;
+
+        var exportQuery = _context.InvoiceItems
+            .Where(ii => ii.Invoice.InvoiceDate >= fromDateUtc && ii.Invoice.InvoiceDate <= toDateUtc);
+
+        if (supplierId.HasValue)
+            exportQuery = exportQuery.Where(ii => ii.Product.SupplierId == supplierId.Value);
+        if (buyerId.HasValue)
+            exportQuery = exportQuery.Where(ii => ii.Invoice.BuyerId == buyerId.Value);
+
+        var flattenedItems = await exportQuery
+            .Select(ii => new
+            {
+                ii.ProductId,
+                ProductCode = ii.Product.ProductCode,
+                ProductName = ii.Product.Name,
+                SupplierId = ii.Product.SupplierId,
+                SupplierName = ii.Product.Supplier.Name,
+                ProductUnit = ii.Product.CurrentUnit ?? "",
+                ii.Quantity,
+                ii.UnitPrice,
+                ii.TotalPrice,
+                ii.Unit,
+                InvoiceDate = ii.Invoice.InvoiceDate
+            })
+            .ToListAsync();
+
+        var data = flattenedItems
+            .GroupBy(x => new
+            {
+                x.ProductId,
+                x.ProductCode,
+                x.ProductName,
+                x.SupplierId,
+                x.SupplierName,
+                x.ProductUnit
+            })
+            .Select(g => new HighestSpendingProductDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductCode = g.Key.ProductCode,
+                ProductName = g.Key.ProductName,
+                SupplierId = g.Key.SupplierId,
+                SupplierName = g.Key.SupplierName,
+                Unit = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => x.Unit ?? g.Key.ProductUnit)
+                    .FirstOrDefault() ?? g.Key.ProductUnit,
+                TotalSpending = g.Sum(x => x.TotalPrice),
+                TotalQuantity = g.Sum(x => x.Quantity),
+                OrderCount = g.Count(),
+                AverageUnitPrice = g.Average(x => x.UnitPrice),
+                LatestUnitPrice = g.OrderByDescending(x => x.InvoiceDate)
+                    .Select(x => (decimal?)x.UnitPrice)
+                    .FirstOrDefault()
+            })
+            .OrderByDescending(p => p.TotalSpending)
+            .Take(limit)
+            .ToList();
+
+        var csv = GenerateHighestSpendingCsv(data, fromDateUtc, toDateUtc);
+        var fileName = $"haesta_innkaup_{fromDateUtc:yyyyMMdd}_{toDateUtc:yyyyMMdd}.csv";
+
+        return File(
+            System.Text.Encoding.UTF8.GetBytes(csv),
+            "text/csv; charset=utf-8",
+            fileName);
+    }
+
+    private string GenerateHighestSpendingCsv(List<HighestSpendingProductDto> data, DateTime fromDate, DateTime toDate)
+    {
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("Röð,Vörunúmer,Vöruheiti,Birgir,Eining,Heildarútgjöld,Heildarmagn,Fjöldi pantana,Meðalverð,Síðasta verð");
+
+        var rank = 1;
+        foreach (var item in data)
+        {
+            csv.AppendLine($"{rank}," +
+                          $"{EscapeCsv(item.ProductCode)}," +
+                          $"{EscapeCsv(item.ProductName)}," +
+                          $"{EscapeCsv(item.SupplierName)}," +
+                          $"{EscapeCsv(item.Unit)}," +
+                          $"{item.TotalSpending.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.TotalQuantity.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}," +
+                          $"{item.OrderCount}," +
+                          $"{(item.AverageUnitPrice.HasValue ? item.AverageUnitPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}," +
+                          $"{(item.LatestUnitPrice.HasValue ? item.LatestUnitPrice.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")}");
+            rank++;
+        }
+
         return csv.ToString();
     }
 }

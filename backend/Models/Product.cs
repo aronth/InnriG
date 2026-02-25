@@ -22,6 +22,13 @@ public class Product
     
     [MaxLength(20)]
     public string? CurrentUnit { get; set; }
+
+    /// <summary>Multiplier to convert unit price to normalized unit price: normalizedPrice = unitPrice * NormalizedUnitMultiplier (e.g. 0.1 for 10 kg per sold unit).</summary>
+    public decimal? NormalizedUnitMultiplier { get; set; }
+
+    /// <summary>Base unit for comparison: kg, L, m, stk.</summary>
+    [MaxLength(10)]
+    public string? NormalizedBaseUnit { get; set; }
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

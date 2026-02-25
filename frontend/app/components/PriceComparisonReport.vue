@@ -3,7 +3,7 @@
     <h2 class="text-2xl font-bold mb-4">Verðbreytingaskýrsla</h2>
     
     <!-- Date Selection and Filters -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
           Frá dagsetningu
@@ -39,6 +39,24 @@
             :value="supplier.id"
           >
             {{ supplier.name }}
+          </option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Kaupandi
+        </label>
+        <select
+          v-model="selectedBuyerId"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md"
+        >
+          <option value="">Allir kaupendur</option>
+          <option
+            v-for="buyer in buyers"
+            :key="buyer.id"
+            :value="buyer.id"
+          >
+            {{ buyer.name || 'Nafnlaus' }} ({{ buyer.taxId }})
           </option>
         </select>
       </div>
@@ -248,6 +266,7 @@ import type { PriceComparisonDto, PriceComparisonSummaryDto } from '~/app/compos
 
 const { getPriceComparison, exportToCsv } = usePriceComparison()
 const { getAllSuppliers } = useSuppliers()
+const { getAllBuyers } = useBuyers()
 
 const fromDate = ref('')
 const toDate = ref('')
@@ -256,7 +275,9 @@ const summary = ref<PriceComparisonSummaryDto | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const suppliers = ref<any[]>([])
+const buyers = ref<any[]>([])
 const selectedSupplierId = ref<string>('')
+const selectedBuyerId = ref<string>('')
 const sortBy = ref<string>('')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 
@@ -269,11 +290,12 @@ onMounted(async () => {
   toDate.value = today.toISOString().split('T')[0]
   fromDate.value = threeMonthsAgo.toISOString().split('T')[0]
   
-  // Load suppliers for filter
   try {
-    suppliers.value = await getAllSuppliers()
+    const [supplierList, buyerList] = await Promise.all([getAllSuppliers(), getAllBuyers()])
+    suppliers.value = supplierList
+    buyers.value = buyerList
   } catch (e: any) {
-    console.error('Error loading suppliers:', e)
+    console.error('Error loading suppliers/buyers:', e)
   }
 })
 
@@ -284,7 +306,8 @@ const loadComparison = async () => {
     loading.value = true
     error.value = null
     const supplierId = selectedSupplierId.value || undefined
-    const result = await getPriceComparison(fromDate.value, toDate.value, supplierId)
+    const buyerId = selectedBuyerId.value || undefined
+    const result = await getPriceComparison(fromDate.value, toDate.value, supplierId, buyerId)
     products.value = result.products
     summary.value = result.summary
   } catch (e: any) {
@@ -385,7 +408,8 @@ const handleExport = async () => {
   
   try {
     const supplierId = selectedSupplierId.value || undefined
-    await exportToCsv(fromDate.value, toDate.value, supplierId)
+    const buyerId = selectedBuyerId.value || undefined
+    await exportToCsv(fromDate.value, toDate.value, supplierId, buyerId)
   } catch (e: any) {
     error.value = e.message || 'Villa við að sækja CSV'
     console.error('Error exporting CSV:', e)

@@ -4,6 +4,8 @@ export interface ProductListDto {
     name: string
     description?: string
     currentUnit?: string
+    normalizedUnitMultiplier?: number
+    normalizedBaseUnit?: string
     supplierId: string
     supplierName: string
     latestPrice?: number
@@ -34,6 +36,20 @@ export interface MostOrderedProductDto {
     latestUnitPrice?: number
 }
 
+export interface HighestSpendingProductDto {
+    productId: string
+    productCode: string
+    productName: string
+    supplierId: string
+    supplierName: string
+    unit?: string
+    totalSpending: number
+    totalQuantity: number
+    orderCount: number
+    averageUnitPrice?: number
+    latestUnitPrice?: number
+}
+
 export interface PaginatedResponse<T> {
     items: T[]
     totalCount: number
@@ -46,10 +62,12 @@ export interface PaginatedResponse<T> {
 
 export interface ProductFilters {
     supplierId?: string
+    buyerId?: string
     search?: string
     minPrice?: number
     maxPrice?: number
     hasPrice?: boolean
+    hasMultiplier?: boolean
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     page?: number
@@ -65,10 +83,12 @@ export const useProducts = () => {
         const params = new URLSearchParams()
         
         if (filters?.supplierId) params.append('supplierId', filters.supplierId)
+        if (filters?.buyerId) params.append('buyerId', filters.buyerId)
         if (filters?.search) params.append('search', filters.search)
         if (filters?.minPrice !== undefined) params.append('minPrice', filters.minPrice.toString())
         if (filters?.maxPrice !== undefined) params.append('maxPrice', filters.maxPrice.toString())
         if (filters?.hasPrice !== undefined) params.append('hasPrice', filters.hasPrice.toString())
+        if (filters?.hasMultiplier !== undefined) params.append('hasMultiplier', filters.hasMultiplier.toString())
         if (filters?.sortBy) params.append('sortBy', filters.sortBy)
         if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder)
         if (filters?.page) params.append('page', filters.page.toString())
@@ -106,6 +126,13 @@ export const useProducts = () => {
         })
     }
 
+    const updateProduct = async (id: string, product: Record<string, unknown>): Promise<void> => {
+        await apiFetch(`${apiBase}/api/products/${id}`, {
+            method: 'PUT',
+            body: product
+        })
+    }
+
     const deleteProduct = async (id: string): Promise<void> => {
         await apiFetch(`${apiBase}/api/products/${id}`, {
             method: 'DELETE'
@@ -116,6 +143,7 @@ export const useProducts = () => {
         const params = new URLSearchParams()
         
         if (filters?.supplierId) params.append('supplierId', filters.supplierId)
+        if (filters?.buyerId) params.append('buyerId', filters.buyerId)
         if (filters?.search) params.append('search', filters.search)
         if (filters?.minPrice !== undefined) params.append('minPrice', filters.minPrice.toString())
         if (filters?.maxPrice !== undefined) params.append('maxPrice', filters.maxPrice.toString())
@@ -147,12 +175,14 @@ export const useProducts = () => {
         fromDate: string,
         toDate: string,
         supplierId?: string,
+        buyerId?: string,
         limit: number = 50
     ): Promise<MostOrderedProductDto[]> => {
         const params = new URLSearchParams()
         params.append('fromDate', fromDate)
         params.append('toDate', toDate)
         if (supplierId) params.append('supplierId', supplierId)
+        if (buyerId) params.append('buyerId', buyerId)
         params.append('limit', limit.toString())
 
         const url = `${apiBase}/api/products/most-ordered?${params.toString()}`
@@ -163,12 +193,14 @@ export const useProducts = () => {
         fromDate: string,
         toDate: string,
         supplierId?: string,
+        buyerId?: string,
         limit: number = 500
     ) => {
         const params = new URLSearchParams()
         params.append('fromDate', fromDate)
         params.append('toDate', toDate)
         if (supplierId) params.append('supplierId', supplierId)
+        if (buyerId) params.append('buyerId', buyerId)
         params.append('limit', limit.toString())
 
         const response = await fetch(
@@ -193,6 +225,60 @@ export const useProducts = () => {
         document.body.removeChild(a)
     }
 
+    const getHighestSpendingProducts = async (
+        fromDate: string,
+        toDate: string,
+        supplierId?: string,
+        buyerId?: string,
+        limit: number = 50
+    ): Promise<HighestSpendingProductDto[]> => {
+        const params = new URLSearchParams()
+        params.append('fromDate', fromDate)
+        params.append('toDate', toDate)
+        if (supplierId) params.append('supplierId', supplierId)
+        if (buyerId) params.append('buyerId', buyerId)
+        params.append('limit', limit.toString())
+
+        const url = `${apiBase}/api/products/highest-spending?${params.toString()}`
+        return await apiFetch<HighestSpendingProductDto[]>(url)
+    }
+
+    const exportHighestSpendingToCsv = async (
+        fromDate: string,
+        toDate: string,
+        supplierId?: string,
+        buyerId?: string,
+        limit: number = 500
+    ) => {
+        const params = new URLSearchParams()
+        params.append('fromDate', fromDate)
+        params.append('toDate', toDate)
+        if (supplierId) params.append('supplierId', supplierId)
+        if (buyerId) params.append('buyerId', buyerId)
+        params.append('limit', limit.toString())
+
+        const response = await fetch(
+            `${apiBase}/api/products/highest-spending/export?${params.toString()}`,
+            {
+                credentials: 'include'
+            }
+        )
+
+        if (!response.ok) {
+            throw new Error('Failed to export CSV')
+        }
+
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `haesta_innkaup_${fromDate}_${toDate}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+    }
+
     return {
         getAllProducts,
         lookupProducts,
@@ -200,9 +286,12 @@ export const useProducts = () => {
         getProductHistory,
         compareProductPrices,
         compareMultipleProducts,
+        updateProduct,
         deleteProduct,
         exportToCsv,
         getMostOrderedProducts,
-        exportMostOrderedToCsv
+        exportMostOrderedToCsv,
+        getHighestSpendingProducts,
+        exportHighestSpendingToCsv
     }
 }

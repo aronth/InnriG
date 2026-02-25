@@ -5,16 +5,16 @@
       <div class="flex items-center gap-3 mb-4">
         <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
           <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
         <div>
-          <h1 class="text-2xl font-bold text-gray-800">Mest pantaðar vörur</h1>
-          <p class="text-sm text-gray-600">Skoðaðu vörur eftir magni sem pantað hefur verið á tímabilinu</p>
+          <h1 class="text-2xl font-bold text-gray-800">Hæsta innkaup</h1>
+          <p class="text-sm text-gray-600">Vörur raðaðar eftir heildarútgjöldum á tímabilinu (raunverð á hverju kaupi)</p>
         </div>
       </div>
-      
-      <!-- Date Selection and Filters -->
+
+      <!-- Date and filters -->
       <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -68,7 +68,7 @@
 
       <div class="mt-4 flex gap-3">
         <button
-          @click="loadMostOrdered"
+          @click="loadHighestSpending"
           :disabled="loading || !fromDate || !toDate"
           class="px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -93,22 +93,22 @@
       </div>
     </div>
 
-    <!-- Error Message -->
+    <!-- Error -->
     <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
       {{ error }}
     </div>
 
-    <!-- Results Table -->
+    <!-- Results table -->
     <div v-if="products.length > 0" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
       <div class="p-6 border-b border-gray-200">
         <h2 class="text-xl font-bold text-gray-800">
           Niðurstöður ({{ products.length }} vörur)
         </h2>
         <p class="text-sm text-gray-600 mt-1">
-          Sýnir {{ products.length }} mest pantaðu vörurnar eftir magni á tímabilinu
+          Vörur raðaðar eftir heildarútgjöldum á tímabilinu
         </p>
       </div>
-      
+
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gradient-to-r from-indigo-50 to-purple-50">
@@ -124,6 +124,9 @@
               </th>
               <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Birgir
+              </th>
+              <th class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Heildarútgjöld
               </th>
               <th class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Heildarmagn
@@ -162,6 +165,9 @@
                 {{ product.supplierName }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-indigo-600 text-right">
+                {{ formatCurrency(product.totalSpending) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
                 {{ formatQuantity(product.totalQuantity) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
@@ -188,17 +194,17 @@
       </div>
     </div>
 
-    <!-- Empty State -->
+    <!-- Empty state -->
     <div v-else-if="!loading && fromDate && toDate" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-12 text-center">
       <div class="text-gray-400 mb-4">
         <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
       <p class="text-gray-500 text-lg">Engar vörur fundust á þessu tímabili</p>
     </div>
 
-    <!-- Loading State -->
+    <!-- Loading -->
     <div v-if="loading" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-12 text-center">
       <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
       <p class="mt-4 text-gray-600">Hleður gögnum...</p>
@@ -207,9 +213,9 @@
 </template>
 
 <script setup lang="ts">
-import type { MostOrderedProductDto } from '~/app/composables/useProducts'
+import type { HighestSpendingProductDto } from '~/app/composables/useProducts'
 
-const { getMostOrderedProducts, exportMostOrderedToCsv } = useProducts()
+const { getHighestSpendingProducts, exportHighestSpendingToCsv } = useProducts()
 const { getAllSuppliers } = useSuppliers()
 const { getAllBuyers } = useBuyers()
 
@@ -217,13 +223,20 @@ const fromDate = ref('')
 const toDate = ref('')
 const selectedSupplierId = ref('')
 const selectedBuyerId = ref('')
-const products = ref<MostOrderedProductDto[]>([])
+const products = ref<HighestSpendingProductDto[]>([])
 const suppliers = ref<Array<{ id: string; name: string }>>([])
 const buyers = ref<Array<{ id: string; name: string; taxId?: string }>>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// Load suppliers and buyers on mount
+function setDefaultDates () {
+  const today = new Date()
+  const threeMonthsAgo = new Date()
+  threeMonthsAgo.setMonth(today.getMonth() - 3)
+  toDate.value = today.toISOString().split('T')[0]
+  fromDate.value = threeMonthsAgo.toISOString().split('T')[0]
+}
+
 onMounted(async () => {
   try {
     const [supplierList, buyerList] = await Promise.all([getAllSuppliers(), getAllBuyers()])
@@ -232,30 +245,22 @@ onMounted(async () => {
   } catch (e) {
     console.error('Error loading suppliers/buyers:', e)
   }
-
-  // Set default dates (last 3 months)
-  const today = new Date()
-  const threeMonthsAgo = new Date()
-  threeMonthsAgo.setMonth(today.getMonth() - 3)
-  
-  toDate.value = today.toISOString().split('T')[0]
-  fromDate.value = threeMonthsAgo.toISOString().split('T')[0]
+  setDefaultDates()
 })
 
-const loadMostOrdered = async () => {
+const loadHighestSpending = async () => {
   if (!fromDate.value || !toDate.value) return
-  
+
   try {
     loading.value = true
     error.value = null
-    
     const supplierId = selectedSupplierId.value || undefined
     const buyerId = selectedBuyerId.value || undefined
-    const result = await getMostOrderedProducts(fromDate.value, toDate.value, supplierId, buyerId, 100)
+    const result = await getHighestSpendingProducts(fromDate.value, toDate.value, supplierId, buyerId, 100)
     products.value = result
   } catch (e: any) {
     error.value = e.message || 'Villa við að sækja skýrslu'
-    console.error('Error loading most ordered products:', e)
+    console.error('Error loading highest spending:', e)
     products.value = []
   } finally {
     loading.value = false
@@ -263,12 +268,7 @@ const loadMostOrdered = async () => {
 }
 
 const resetFilters = () => {
-  const today = new Date()
-  const threeMonthsAgo = new Date()
-  threeMonthsAgo.setMonth(today.getMonth() - 3)
-  
-  toDate.value = today.toISOString().split('T')[0]
-  fromDate.value = threeMonthsAgo.toISOString().split('T')[0]
+  setDefaultDates()
   selectedSupplierId.value = ''
   selectedBuyerId.value = ''
   products.value = []
@@ -277,14 +277,12 @@ const resetFilters = () => {
 
 const handleExport = async () => {
   if (!fromDate.value || !toDate.value) return
-  
   try {
     loading.value = true
     error.value = null
-    
     const supplierId = selectedSupplierId.value || undefined
     const buyerId = selectedBuyerId.value || undefined
-    await exportMostOrderedToCsv(fromDate.value, toDate.value, supplierId, buyerId, 500)
+    await exportHighestSpendingToCsv(fromDate.value, toDate.value, supplierId, buyerId, 500)
   } catch (e: any) {
     error.value = e.message || 'Villa við að sækja CSV'
     console.error('Error exporting CSV:', e)
@@ -313,4 +311,3 @@ const formatQuantity = (value: number) => {
   }).format(value)
 }
 </script>
-
